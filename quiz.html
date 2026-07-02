@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>七一知识问答 · 背题系统</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(135deg, #b71c1c 0%, #d32f2f 50%, #f44336 100%);
+    min-height: 100vh;
+    color: #222;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #app {
+    width: 100%;
+    max-width: 760px;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    overflow: hidden;
+  }
+  .topbar {
+    background: linear-gradient(90deg, #b71c1c, #d32f2f);
+    color: #fff;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .topbar h1 { font-size: 18px; font-weight: 600; letter-spacing: 1px; }
+  .topbar h1 .star { margin-right: 6px; }
+  .stats { display: flex; gap: 10px; font-size: 13px; align-items: center; }
+  .stats .pill {
+    background: rgba(255,255,255,0.18);
+    padding: 4px 10px;
+    border-radius: 12px;
+  }
+  .stats .pill b { font-weight: 700; }
+  .stats .pill.ok b { color: #a5f3a5; }
+  .stats .pill.err b { color: #ffd2d2; }
+  .card { padding: 28px 28px 24px; }
+  .q-meta {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px; color: #888; font-size: 13px;
+  }
+  .q-num { font-weight: 600; color: #b71c1c; }
+  .q-tag {
+    background: #fff3e0; color: #b71c1c;
+    padding: 2px 10px; border-radius: 10px; font-size: 12px;
+  }
+  .q-type {
+    background: #e3f2fd; color: #1565c0;
+    padding: 2px 10px; border-radius: 10px; font-size: 12px; margin-left: 8px;
+  }
+  .question {
+    font-size: 19px; line-height: 1.7; color: #1a1a1a;
+    margin-bottom: 22px; font-weight: 500;
+  }
+  .question .blank {
+    display: inline-block; border-bottom: 2px solid #b71c1c;
+    min-width: 60px; margin: 0 2px; color: #b71c1c; font-weight: 700;
+  }
+  .options { display: flex; flex-direction: column; gap: 12px; }
+  .opt {
+    text-align: left; padding: 14px 18px; border: 2px solid #ececec;
+    border-radius: 10px; background: #fafafa; font-size: 16px; line-height: 1.5;
+    cursor: pointer; transition: all .15s ease; display: flex; align-items: flex-start;
+    gap: 10px; color: #333; font-family: inherit;
+  }
+  .opt:hover:not(:disabled) { border-color: #d32f2f; background: #fff5f5; transform: translateX(2px); }
+  .opt .letter {
+    width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%;
+    background: #e0e0e0; color: #555; display: inline-flex;
+    align-items: center; justify-content: center; font-weight: 700; font-size: 14px;
+  }
+  .opt.correct { border-color: #4caf50; background: #e8f5e9; color: #1b5e20; }
+  .opt.correct .letter { background: #4caf50; color: #fff; }
+  .opt.wrong { border-color: #f44336; background: #ffebee; color: #b71c1c; }
+  .opt.wrong .letter { background: #f44336; color: #fff; }
+  .opt:disabled { cursor: default; }
+  .blank-input-wrap { display: flex; gap: 10px; margin-bottom: 8px; }
+  .blank-input {
+    flex: 1; padding: 14px 16px; border: 2px solid #ececec;
+    border-radius: 10px; font-size: 16px; font-family: inherit;
+    outline: none; transition: border-color .15s;
+  }
+  .blank-input:focus { border-color: #d32f2f; }
+  .blank-input:disabled { background: #f5f5f5; color: #888; }
+  .submit-btn {
+    padding: 14px 24px; background: linear-gradient(90deg, #b71c1c, #d32f2f);
+    color: #fff; border: none; border-radius: 10px; font-size: 15px;
+    font-weight: 600; cursor: pointer; font-family: inherit; transition: all .15s;
+  }
+  .submit-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(183,28,28,0.4); }
+  .submit-btn:disabled { background: #bdbdbd; cursor: default; transform: none; box-shadow: none; }
+  .feedback {
+    margin-top: 18px; padding: 14px 16px; border-radius: 10px;
+    font-size: 15px; line-height: 1.6; display: none;
+  }
+  .feedback.show { display: block; animation: pop .2s ease; }
+  .feedback.ok { background: #e8f5e9; border-left: 4px solid #4caf50; color: #1b5e20; }
+  .feedback.bad { background: #ffebee; border-left: 4px solid #f44336; color: #b71c1c; }
+  .feedback b { font-weight: 700; }
+  @keyframes pop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+  .actions { margin-top: 22px; display: flex; gap: 12px; justify-content: flex-end; }
+  .btn {
+    padding: 11px 26px; border: none; border-radius: 8px;
+    font-size: 15px; font-weight: 600; cursor: pointer; transition: all .15s; font-family: inherit;
+  }
+  .btn-primary { background: linear-gradient(90deg, #b71c1c, #d32f2f); color: #fff; }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(183,28,28,0.4); }
+  .btn-stop {
+    background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.6);
+    padding: 6px 14px; font-size: 13px; border-radius: 6px; cursor: pointer; font-family: inherit;
+  }
+  .btn-stop:hover { background: rgba(255,255,255,0.15); }
+  .end-screen { padding: 40px 28px; text-align: center; }
+  .end-screen h2 { color: #b71c1c; font-size: 26px; margin-bottom: 8px; }
+  .end-screen .sub { color: #888; margin-bottom: 28px; }
+  .big-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }
+  .big-stat { background: #fafafa; border-radius: 12px; padding: 22px 12px; border: 1px solid #eee; }
+  .big-stat .num { font-size: 32px; font-weight: 700; line-height: 1; margin-bottom: 6px; }
+  .big-stat .label { font-size: 13px; color: #888; }
+  .big-stat.ok .num { color: #4caf50; }
+  .big-stat.err .num { color: #f44336; }
+  .big-stat.total .num { color: #b71c1c; }
+  .accuracy-bar {
+    background: #eee; height: 14px; border-radius: 7px; overflow: hidden;
+    margin: 0 auto 28px; max-width: 400px;
+  }
+  .accuracy-fill { height: 100%; background: linear-gradient(90deg, #4caf50, #8bc34a); transition: width .8s ease; }
+  .wrong-list {
+    text-align: left; background: #fafafa; border-radius: 10px;
+    padding: 16px 20px; margin-bottom: 24px; max-height: 320px; overflow-y: auto;
+  }
+  .wrong-list h3 { font-size: 15px; color: #b71c1c; margin-bottom: 12px; }
+  .wrong-list .item { padding: 10px 0; border-bottom: 1px dashed #e0e0e0; font-size: 14px; line-height: 1.5; }
+  .wrong-list .item:last-child { border: none; }
+  .wrong-list .item .q { color: #333; margin-bottom: 4px; }
+  .wrong-list .item .a { color: #4caf50; font-weight: 600; }
+  .wrong-list .item .ya { color: #f44336; }
+  .empty-note { text-align: center; color: #888; padding: 20px; font-size: 14px; }
+  @media (max-width: 600px) {
+    .topbar { flex-direction: column; align-items: flex-start; }
+    .card { padding: 20px; }
+    .question { font-size: 17px; }
+    .big-stat .num { font-size: 26px; }
+    .blank-input-wrap { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="quiz-screen">
+    <div class="topbar">
+      <h1><span class="star">★</span>七一知识问答 · 背题系统</h1>
+      <div class="stats">
+        <span class="pill">已答 <b id="answered">0</b></span>
+        <span class="pill ok">对 <b id="correct">0</b></span>
+        <span class="pill err">错 <b id="wrong">0</b></span>
+        <button class="btn-stop" id="stop-btn">结束</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="q-meta">
+        <span class="q-num">第 <span id="q-num">-</span> 题</span>
+        <span>
+          <span class="q-type" id="q-type">-</span>
+          <span class="q-tag">题库共 <span id="total-q">0</span> 题</span>
+        </span>
+      </div>
+      <div class="question" id="question">正在加载题目...</div>
+      <div id="answer-area"></div>
+      <div class="feedback" id="feedback"></div>
+      <div class="actions">
+        <button class="btn btn-primary" id="next-btn" style="display:none">下一题 →</button>
+      </div>
+    </div>
+  </div>
+  <div id="end-screen" class="end-screen" style="display:none">
+    <h2>练习结束</h2>
+    <div class="sub">本次答题统计如下</div>
+    <div class="big-stats">
+      <div class="big-stat total"><div class="num" id="end-total">0</div><div class="label">总答题数</div></div>
+      <div class="big-stat ok"><div class="num" id="end-correct">0</div><div class="label">答对</div></div>
+      <div class="big-stat err"><div class="num" id="end-wrong">0</div><div class="label">答错</div></div>
+    </div>
+    <div style="margin-bottom:8px;color:#555;font-size:14px;">正确率 <b id="end-acc">0%</b></div>
+    <div class="accuracy-bar"><div class="accuracy-fill" id="acc-fill" style="width:0%"></div></div>
+    <div class="wrong-list" id="wrong-list" style="display:none">
+      <h3>错题回顾</h3>
+      <div id="wrong-items"></div>
+    </div>
+    <div class="empty-note" id="no-wrong" style="display:none">本次没有错题，太棒了！</div>
+    <button class="btn btn-primary" id="restart-btn">再来一次</button>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+ *  题库（共 100 题：50 道填空题 + 50 道选择题）
+ *  内容严格按用户提供的原文，不做任何修改。
+ *
+ *  题型说明：
+ *    1) 选择题 type:"choice"
+ *         options: 选项数组（原文）
+ *         answer: 正确选项索引(0=A,1=B,2=C,3=D)
+ *    2) 填空题 type:"blank"
+ *         question: 题干原文（保留下划线）
+ *         answer: 正确答案原文（用于展示）
+ *         accept: 可接受的答案数组（均为原文形式）
+ *         判定规则：标准化（去空格 + 去首尾包裹符号）后，与 accept 中任一项完全相等才算正确
+ * ========================================================================= */
+const QUESTIONS = [
+  /* ========== 一、填空题（50 道） ========== */
+  { type:"blank", question:"中国共产党第二十届中央委员会第四次全体会议于____年____月____日至____日在北京举行。", answer:"2025、10、20、23", accept:["2025、10、20、23"] },
+  { type:"blank", question:"二十届四中全会审议通过了《中共中央关于制定国民经济和社会发展第____个五年规划的建议》。", answer:"十五", accept:["十五"] },
+  { type:"blank", question:"全会指出，“十五五”时期经济社会发展必须遵循____项原则。", answer:"六", accept:["六"] },
+  { type:"blank", question:"二十届四中全会强调，以____为中心，坚持稳中求进工作总基调。", answer:"经济建设", accept:["经济建设"] },
+  { type:"blank", question:"全会提出，以____为主题，推动经济实现质的有效提升和量的合理增长。", answer:"高质量发展", accept:["高质量发展"] },
+  { type:"blank", question:"二十届四中全会明确，以____为根本动力，破解发展难题、增强发展活力。", answer:"改革创新", accept:["改革创新"] },
+  { type:"blank", question:"全会指出，以____为根本目的，不断实现人民对美好生活的向往。", answer:"满足人民日益增长的美好生活需要", accept:["满足人民日益增长的美好生活需要"] },
+  { type:"blank", question:"二十届四中全会提出，以____为根本保障，确保发展方向不偏、行稳致远。", answer:"全面从严治党", accept:["全面从严治党"] },
+  { type:"blank", question:"全会号召，全党全军全国各族人民要更加紧密地团结在以____为核心的党中央周围。", answer:"习近平", accept:["习近平"] },
+  { type:"blank", question:"二十届四中全会增补____为中共中央军事委员会副主席。", answer:"张升民", accept:["张升民"] },
+  { type:"blank", question:"全会提出，“十五五”时期____水平大幅提高，创新驱动发展成效显著。", answer:"科技自立自强", accept:["科技自立自强"] },
+  { type:"blank", question:"二十届四中全会指出，进一步____取得新突破，重点领域和关键环节改革纵深推进。", answer:"全面深化改革", accept:["全面深化改革"] },
+  { type:"blank", question:"全会强调，____明显提升，社会主义核心价值观广泛弘扬，文化自信持续增强。", answer:"社会文明程度", accept:["社会文明程度"] },
+  { type:"blank", question:"二十届四中全会提出，____不断提高，民生福祉达到新水平，共同富裕扎实推进。", answer:"人民生活品质", accept:["人民生活品质"] },
+  { type:"blank", question:"全会指出，____取得新的重大进展，生态环境持续改善，绿色发展深入人心。", answer:"美丽中国建设", accept:["美丽中国建设"] },
+  { type:"blank", question:"二十届四中全会强调，____更加巩固，国家安全体系和能力现代化水平显著提升。", answer:"国家安全屏障", accept:["国家安全屏障"] },
+  { type:"blank", question:"全会提出，到____年，我国人均国内生产总值达到中等发达国家水平。", answer:"2035", accept:["2035"] },
+  { type:"blank", question:"二十届四中全会指出，“十五五”时期是基本实现社会主义现代化____、全面发力的关键时期。", answer:"夯实基础", accept:["夯实基础"] },
+  { type:"blank", question:"全会强调，我国发展处于____和风险挑战并存、不确定难预料因素增多的时期。", answer:"战略机遇", accept:["战略机遇"] },
+  { type:"blank", question:"二十届四中全会提出，坚持____，把党的领导贯穿经济社会发展全过程各方面。", answer:"党的全面领导", accept:["党的全面领导"] },
+  { type:"blank", question:"全会指出，坚持____，始终把人民利益放在首位，发展成果由人民共享。", answer:"人民至上", accept:["人民至上"] },
+  { type:"blank", question:"二十届四中全会强调，坚持____，推动有效市场和有为政府更好结合。", answer:"高质量发展", accept:["高质量发展"] },
+  { type:"blank", question:"全会提出，坚持____，破除体制机制障碍，激发内生发展动力。", answer:"全面深化改革", accept:["全面深化改革"] },
+  { type:"blank", question:"二十届四中全会指出，坚持____，统筹国内国际两个大局、发展安全两件大事。", answer:"统筹发展和安全", accept:["统筹发展和安全"] },
+  { type:"blank", question:"全会强调，以中国式现代化全面推进____伟业，是新时代新征程党的中心任务。", answer:"中华民族伟大复兴", accept:["中华民族伟大复兴"] },
+  { type:"blank", question:"二十届四中全会提出，推动人的全面发展、全体人民____迈出坚实步伐。", answer:"共同富裕", accept:["共同富裕"] },
+  { type:"blank", question:"全会指出，确保____取得决定性进展，为 2035 年目标奠定坚实基础。", answer:"基本实现社会主义现代化", accept:["基本实现社会主义现代化"] },
+  { type:"blank", question:"二十届四中全会强调，世界百年变局加速演进，____深刻调整，国际竞争日趋激烈。", answer:"国际力量对比", accept:["国际力量对比"] },
+  { type:"blank", question:"全会提出，巩固拓展脱贫攻坚成果，统筹建立常态化____机制，防止规模性返贫。", answer:"防止返贫致贫", accept:["防止返贫致贫"] },
+  { type:"blank", question:"二十届四中全会指出，发展____，提高现代服务业与先进制造业、现代农业融合水平。", answer:"服务业扩能提质行动", accept:["服务业扩能提质行动"] },
+  { type:"blank", question:"“十五五”时期是基本实现社会主义现代化____的关键时期。", answer:"承前启后", accept:["承前启后"] },
+  { type:"blank", question:"“十五五”时期经济社会发展坚持以____为工作总基调。", answer:"稳中求进", accept:["稳中求进"] },
+  { type:"blank", question:"“十五五”时期经济社会发展坚持以____为主题。", answer:"高质量发展", accept:["高质量发展"] },
+  { type:"blank", question:"“十五五”时期经济社会发展坚持以____为根本动力。", answer:"改革创新", accept:["改革创新"] },
+  { type:"blank", question:"“十五五”时期经济社会发展坚持以____为根本目的。", answer:"满足人民日益增长的美好生活需要", accept:["满足人民日益增长的美好生活需要"] },
+  { type:"blank", question:"“十五五”时期经济社会发展坚持以____为根本保障。", answer:"全面从严治党", accept:["全面从严治党"] },
+  { type:"blank", question:"我国“十五五”时期发展处于____和风险挑战并存、不确定难预料因素增多的时期。", answer:"战略机遇", accept:["战略机遇"] },
+  { type:"blank", question:"到 2035 年，我国____达到中等发达国家水平。", answer:"人均国内生产总值", accept:["人均国内生产总值"] },
+  { type:"blank", question:"“十五五”时期要推动人的全面发展、全体人民____迈出坚实步伐。", answer:"共同富裕", accept:["共同富裕"] },
+  { type:"blank", question:"“十五五”时期美丽中国建设要取得____。", answer:"新的重大进展", accept:["新的重大进展"] },
+  { type:"blank", question:"五四运动是近代中国革命史上具有划时代意义的。事件，标志着_______的伟大开端。五四运动孕育了以爱国、进步、民主、科学为主要内容的伟大五四精神，其核心是爱国主义精神。人民出版社 2022 年版", answer:"新民主主义革命", accept:["新民主主义革命"] },
+  { type:"blank", question:"1950 年 6 月 30 日，中央人民政府公布施行的_________成为了指导新解放区土地改革的基本法律依据。《中国共产党简史》人民出版社、中共党史出版社 2021 年版", answer:"《中华人民共和国土地改革法》", accept:["《中华人民共和国土地改革法》","中华人民共和国土地改革法"] },
+  { type:"blank", question:"二十届四中全会指出，“十五五” 时期要构建高水平社会主义市场经济体制，推动有效市场和____更好结合。", answer:"有为政府", accept:["有为政府"] },
+  { type:"blank", question:"全会提出，健全新型举国体制，强化国家战略科技力量，加快突破各类 “____” 技术瓶颈。", answer:"卡脖子", accept:["卡脖子"] },
+  { type:"blank", question:"推进共同富裕，要构建初次分配、再分配、____协调配套的基础性制度安排。", answer:"第三次分配", accept:["第三次分配"] },
+  { type:"blank", question:"全会部署全面推进乡村振兴，健全城乡融合发展体制机制，畅通城乡要素____渠道。", answer:"双向流动", accept:["双向流动"] },
+  { type:"blank", question:"统筹发展和安全，要完善大安全格局，筑牢____安全屏障，防范化解各类系统性风险。", answer:"国家安全", accept:["国家安全"] },
+  { type:"blank", question:"文化建设方面，提出健全现代公共文化服务体系，传承弘扬中华优秀传统文化，建设中华民族现代____。", answer:"文明", accept:["文明"] },
+  { type:"blank", question:"绿色低碳发展领域，持续推进碳达峰碳中和，协同推进降碳、减污、扩绿、____。", answer:"增长", accept:["增长"] },
+  { type:"blank", question:"对外开放层面，稳步扩大规则、规制、管理、____等制度型开放。", answer:"标准", accept:["标准"] },
+
+  /* ========== 二、选择题（50 道） ========== */
+  { type:"choice", question:"二十届四中全会的召开时间是（ ）", options:["2025 年 9 月","2025 年 10 月","2025 年 11 月","2025 年 12 月"], answer:1 },
+  { type:"choice", question:"二十届四中全会审议通过的核心文件是（ ）", options:["《十四五规划纲要》","《十五五规划建议》","《2035 远景目标纲要》","《中国式现代化发展纲要》"], answer:1 },
+  { type:"choice", question:"“十五五”时期经济社会发展的工作总基调是（ ）", options:["高速增长","稳中求进","快速转型","提质增效"], answer:1 },
+  { type:"choice", question:"二十届四中全会明确的发展主题是（ ）", options:["高速发展","高质量发展","均衡发展","可持续发展"], answer:1 },
+  { type:"choice", question:"“十五五”时期发展的根本动力是（ ）", options:["扩大内需","改革开放","改革创新","科技创新"], answer:2 },
+  { type:"choice", question:"“十五五”时期发展的根本目的是（ ）", options:["实现民族复兴","提升综合国力","满足人民美好生活需要","建成现代化强国"], answer:2 },
+  { type:"choice", question:"“十五五”时期发展的根本保障是（ ）", options:["党的领导","全面从严治党","制度优势","国家安全"], answer:1 },
+  { type:"choice", question:"二十届四中全会提出的“六个坚持”首要原则是（ ）", options:["人民至上","党的全面领导","高质量发展","统筹发展和安全"], answer:1 },
+  { type:"choice", question:"到 2035 年，我国人均国内生产总值目标是达到（ ）", options:["发达国家水平","中等发达国家水平","发展中国家前列","高收入国家水平"], answer:1 },
+  { type:"choice", question:"“十五五”时期在基本实现社会主义现代化进程中的地位是（ ）", options:["承前启后","收官决胜","奠基开局","全面超越"], answer:0 },
+  { type:"choice", question:"我国当前发展环境的总体判断是（ ）", options:["机遇大于挑战","挑战大于机遇","战略机遇与风险挑战并存","无风险挑战"], answer:2 },
+  { type:"choice", question:"二十届四中全会增补的中央军委副主席是（ ）", options:["张又侠","何卫东","张升民","许其亮"], answer:2 },
+  { type:"choice", question:"“十五五”时期科技发展的核心目标是（ ）", options:["科技高速发展","科技自立自强","科技全面领先","科技自主创新"], answer:1 },
+  { type:"choice", question:"美丽中国建设在“十五五”时期的目标是（ ）", options:["初见成效","取得重大进展","全面建成","领先世界"], answer:1 },
+  { type:"choice", question:"国家安全体系在“十五五”时期的建设目标是（ ）", options:["初步建立","更加巩固","全面完善","绝对安全"], answer:1 },
+  { type:"choice", question:"新时代新征程党的中心任务是（ ）", options:["全面建成小康社会","全面深化改革","以中国式现代化推进民族复兴","全面从严治党"], answer:2 },
+  { type:"choice", question:"“十五五”时期经济增长的目标是（ ）", options:["高速增长","质的有效提升和量的合理增长","规模快速扩张","总量翻倍增长"], answer:1 },
+  { type:"choice", question:"二十届四中全会强调的社会治理经验是（ ）", options:["新时代“枫桥经验”","基层治理经验","平安中国经验","社会和谐经验"], answer:0 },
+  { type:"choice", question:"“十五五”时期乡村振兴的重点是（ ）", options:["脱贫攻坚","宜居宜业和美乡村建设","农村城镇化","农业规模化"], answer:1 },
+  { type:"choice", question:"我国发展长期向好的支撑条件不包括（ ）", options:["经济基础稳","优势多","韧性强","增速快"], answer:3 },
+  { type:"choice", question:"“十五五”时期改革的重点是（ ）", options:["全面深化改革","经济体制改革","科技体制改革","民生领域改革"], answer:0 },
+  { type:"choice", question:"有效市场和有为政府相结合体现了哪项原则（ ）", options:["坚持高质量发展","坚持全面深化改革","坚持统筹发展和安全","坚持人民至上"], answer:0 },
+  { type:"choice", question:"二十届四中全会召开的关键背景是（ ）", options:["十四五收官","全面建成小康社会","2035 目标实现","民族复兴完成"], answer:0 },
+  { type:"choice", question:"“十五五”时期民生领域的核心目标是（ ）", options:["解决温饱","人民生活品质不断提高","实现共同富裕","消除贫富差距"], answer:1 },
+  { type:"choice", question:"国际形势演变对国内发展的影响是（ ）", options:["无影响","影响较小","影响深刻","完全主导"], answer:2 },
+  { type:"choice", question:"常态化防止返贫致贫机制的统筹领域是（ ）", options:["脱贫攻坚","乡村振兴","社会保障","民生工程"], answer:1 },
+  { type:"choice", question:"现代服务业发展的重点行动是（ ）", options:["服务业提质增效","服务业扩能提质","服务业转型升级","服务业融合发展"], answer:1 },
+  { type:"choice", question:"推进中国式现代化必须统筹的两件大事是（ ）", options:["改革和发展","发展和安全","国内和国际","民生和经济"], answer:1 },
+  { type:"choice", question:"“十五五”时期文化建设的目标是（ ）", options:["文化强国建成","社会文明程度明显提升","文化产业繁荣","文化自信增强"], answer:1 },
+  { type:"choice", question:"全会号召团结奋斗的目标是（ ）", options:["全面建成小康社会","基本实现社会主义现代化","建成现代化强国","实现民族复兴"], answer:1 },
+  { type:"choice", question:"习近平总书记指出，树立和践行正确政绩观，起决定性作用的是（ ）", options:["能力水平","党性","工作经验","群众口碑"], answer:1 },
+  { type:"choice", question:"我们共产党人干事业、创政绩，根本目的是（ ）", options:["谋求个人升迁","造福人民","打造形象工程","完成考核指标"], answer:1 },
+  { type:"choice", question:"党员干部创造的政绩，必须经得起（ ）检验。", options:["上级、舆论、时间","实践、人民、历史","数据、报表、排名","会议、文件、督查"], answer:1 },
+  { type:"choice", question:"习近平总书记强调，（ ）是最大的政绩。", options:["经济增速","为民造福","项目数量","宣传声势"], answer:1 },
+  { type:"choice", question:"《习近平关于树立和践行正确政绩观论述摘编》共设置（ ）个专题。", options:["5","7","9","10"], answer:1 },
+  { type:"choice", question:"对待事业要秉持“功成不必在我、（ ）”的境界，一张蓝图绘到底。", options:["功成必定有我","功成不必求名","功成自有公论","功成归于集体"], answer:0 },
+  { type:"choice", question:"践行正确政绩观，要坚决反对形式主义，杜绝装样子、搞花架子和（ ）", options:["深入基层","盲目铺摊子","为民办实事","科学谋划"], answer:1 },
+  { type:"choice", question:"政绩观问题是根本性问题，关乎（ ）、执政为民。", options:["立党为公","严于律己","求真务实","担当作为"], answer:0 },
+  { type:"choice", question:"正确政绩观要求坚持从实际出发、（ ），依靠实干创造业绩。", options:["追求短期成效","按规律办事","贪大求洋蛮干","照搬他人模式"], answer:1 },
+  { type:"choice", question:"党员干部干事创业要务实功、出实招、（ ），摒弃口号式、表态式落实。", options:["求实效","重形式","重包装","赶进度"], answer:0 },
+  { type:"choice", question:"下列不属于“十五五”时期推进收入分配改革举措的是（ ）", options:["完善初次分配薪酬增长机制","强化税收、社保、转移支付再分配调节","抑制、取缔所有民间公益捐赠活动","规范引导第三次分配发展"], answer:2 },
+  { type:"choice", question:"全会提出健全新型举国体制，核心着力点是（ ）", options:["单纯扩大科研经费总量","打通产学研深度融合堵点，攻克关键核心技术","全部科研项目交由市场企业独立完成","限制外资参与国内科研合作"], answer:1 },
+  { type:"choice", question:"推进制度型开放，重点扩大四类制度开放，完整表述为（ ）", options:["规则、规制、管理、标准","资金、市场、人才、贸易","关税、配额、准入、审批","产业、金融、文旅、民生"], answer:0 },
+  { type:"choice", question:"协同推进“降碳、减污、扩绿、增长”，其核心导向是（ ）", options:["先停止发展再治理污染","生态保护与经济发展协同共赢","只追求短期碳排放下降","大规模缩减工业生产规模"], answer:1 },
+  { type:"choice", question:"一体推进“三不腐”完整逻辑排序正确的是（ ）", options:["不能腐、不敢腐、不想腐","不想腐、不能腐、不敢腐","不敢腐、不能腐、不想腐","不敢腐、不想腐、不能腐"], answer:2 },
+  { type:"choice", question:"畅通城乡要素双向流动，重点激活的核心要素不包含（ ）", options:["土地","人才","资本","高耗能落后产业"], answer:3 },
+  { type:"choice", question:"建设中华民族现代文明，首要抓手是（ ）", options:["全盘照搬外来文化体系","传承发展中华优秀传统文化","弱化主流价值传播","缩减公共文化场馆建设"], answer:1 },
+  { type:"choice", question:"筑牢现代化国家安全屏障，要构建的安全格局是（ ）", options:["大安全格局","单一经济安全格局","仅国防安全格局","区域局部安全格局"], answer:0 },
+  { type:"choice", question:"推动有效市场和有为政府更好结合，政府主要职责是（ ）", options:["替代市场配置全部资源","弥补市场失灵、强化宏观调控监管","取消各类市场监管规则","完全退出经济治理领域"], answer:1 },
+  { type:"choice", question:"“十五五”时期作为 2035 远景目标的关键阶段，主要任务是（ ）", options:["完成社会主义现代化强国全面建成","夯实基本实现社会主义现代化物质、制度根基","全面超越所有发达国家发展水平","彻底消除各类发展差距"], answer:1 }
+];
+
+/* =========================================================================
+ *  答题状态与逻辑
+ * ========================================================================= */
+const state = {
+  currentIndex: -1,
+  askedCount: [],
+  wrongCount: [],
+  wrongList: [],
+  answered: 0,
+  correct: 0,
+  answeredCurrent: false
+};
+
+const LETTERS = ["A","B","C","D","E","F"];
+
+/* ---------- 加权抽题算法 ----------
+ *   1) 基础权重 = 1
+ *   2) 答错次数越多，权重越高：weight += wrongCount * 3
+ *   3) 未被抽到过的题目，额外 +10 权重，保证“每题都能被抽到”
+ *   4) 当前题权重清零，避免连续重复
+ * --------------------------------- */
+function selectNext() {
+  if (QUESTIONS.length === 0) return -1;
+  if (QUESTIONS.length === 1) return 0;
+  const weights = QUESTIONS.map((q, i) => {
+    let w = 1;
+    w += (state.wrongCount[i] || 0) * 3;
+    if ((state.askedCount[i] || 0) === 0) w += 10;
+    if (i === state.currentIndex) w = 0;
+    return w;
+  });
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (total <= 0) return state.currentIndex;
+  let r = Math.random() * total;
+  for (let i = 0; i < weights.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return i;
+  }
+  return QUESTIONS.length - 1;
+}
+
+/* ---------- 把题干中的 ____ 替换为可视化的空格线 ---------- */
+function formatQuestion(text) {
+  return text.replace(/_{2,}/g, '<span class="blank">　　　</span>');
+}
+
+/* ---------- 渲染当前题目 ---------- */
+function renderQuestion() {
+  const idx = state.currentIndex;
+  const q = QUESTIONS[idx];
+  document.getElementById("q-num").textContent = idx + 1;
+  document.getElementById("total-q").textContent = QUESTIONS.length;
+  document.getElementById("q-type").textContent = q.type === "choice" ? "选择题" : "填空题";
+  document.getElementById("question").innerHTML = formatQuestion(q.question);
+
+  const area = document.getElementById("answer-area");
+  area.innerHTML = "";
+
+  if (q.type === "choice") {
+    const optsBox = document.createElement("div");
+    optsBox.className = "options";
+    q.options.forEach((opt, i) => {
+      const btn = document.createElement("button");
+      btn.className = "opt";
+      btn.innerHTML = `<span class="letter">${LETTERS[i]}</span><span>${opt}</span>`;
+      btn.onclick = () => handleChoice(i);
+      optsBox.appendChild(btn);
+    });
+    area.appendChild(optsBox);
+  } else {
+    const wrap = document.createElement("div");
+    wrap.className = "blank-input-wrap";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "blank-input";
+    input.id = "blank-input";
+    input.placeholder = "请输入你的答案...";
+    input.onkeydown = (e) => { if (e.key === "Enter") handleBlank(); };
+    const submit = document.createElement("button");
+    submit.className = "submit-btn";
+    submit.textContent = "提交";
+    submit.onclick = handleBlank;
+    wrap.appendChild(input);
+    wrap.appendChild(submit);
+    area.appendChild(wrap);
+    setTimeout(() => input.focus(), 50);
+  }
+
+  document.getElementById("feedback").className = "feedback";
+  document.getElementById("feedback").innerHTML = "";
+  document.getElementById("next-btn").style.display = "none";
+  state.answeredCurrent = false;
+  updateStats();
+}
+
+/* ---------- 处理选择题作答 ---------- */
+function handleChoice(picked) {
+  if (state.answeredCurrent) return;
+  state.answeredCurrent = true;
+  const idx = state.currentIndex;
+  const q = QUESTIONS[idx];
+  const correctIdx = q.answer;
+  const isCorrect = (picked === correctIdx);
+
+  const optBtns = document.querySelectorAll("#answer-area .opt");
+  optBtns.forEach((btn, i) => {
+    btn.disabled = true;
+    if (i === correctIdx) btn.classList.add("correct");
+    else if (i === picked) btn.classList.add("wrong");
+  });
+
+  showFeedbackChoice(isCorrect, q, picked);
+  recordResultChoice(isCorrect, q, picked, correctIdx);
+
+  if (isCorrect) {
+    setTimeout(() => { if (state.answeredCurrent) nextQuestion(); }, 1100);
+  } else {
+    document.getElementById("next-btn").style.display = "inline-block";
+  }
+}
+
+/* ---------- 处理填空题作答 ---------- */
+function handleBlank() {
+  if (state.answeredCurrent) return;
+  const input = document.getElementById("blank-input");
+  const userInput = input.value.trim();
+  if (!userInput) return;
+
+  state.answeredCurrent = true;
+  input.disabled = true;
+  const submitBtn = document.querySelector("#answer-area .submit-btn");
+  if (submitBtn) submitBtn.disabled = true;
+
+  const idx = state.currentIndex;
+  const q = QUESTIONS[idx];
+  const isCorrect = checkBlankAnswer(userInput, q.accept);
+
+  if (isCorrect) {
+    input.style.borderColor = "#4caf50";
+    input.style.backgroundColor = "#e8f5e9";
+  } else {
+    input.style.borderColor = "#f44336";
+    input.style.backgroundColor = "#ffebee";
+  }
+
+  showFeedbackBlank(isCorrect, q, userInput);
+  recordResultBlank(isCorrect, q, userInput);
+
+  if (isCorrect) {
+    setTimeout(() => { if (state.answeredCurrent) nextQuestion(); }, 1500);
+  } else {
+    document.getElementById("next-btn").style.display = "inline-block";
+  }
+}
+
+/* ---------- 填空题答案匹配（严格匹配） ----------
+ *  规则：
+ *    1. 去除所有空白字符（含全角空格）
+ *    2. 去除首尾的包裹符号：《》"" '' （）()
+ *    3. 与 accept 中任一项完全相等才算正确
+ *  注意：不再使用 includes 部分包含匹配
+ * ------------------------------------------- */
+function checkBlankAnswer(input, accept) {
+  const norm = s => (s || "").toString()
+    .replace(/\s+/g, "")           // 去所有空白
+    .replace(/^[《“”"'（(\[【]+/, "")  // 去首部包裹符号
+    .replace(/[》""''）)\]】]+$/, "")  // 去尾部包裹符号
+    .toLowerCase();
+
+  const ni = norm(input);
+  if (!ni) return false;
+
+  const accepts = Array.isArray(accept) ? accept : [accept];
+  for (const a of accepts) {
+    const na = norm(a);
+    if (na && ni === na) return true;
+  }
+  return false;
+}
+
+/* ---------- 显示反馈（选择题） ---------- */
+function showFeedbackChoice(isCorrect, q, picked) {
+  const fb = document.getElementById("feedback");
+  fb.className = "feedback show " + (isCorrect ? "ok" : "bad");
+  if (isCorrect) {
+    fb.innerHTML = `<b>✓ 回答正确！</b> 自动进入下一题...`;
+  } else {
+    const correctIdx = q.answer;
+    fb.innerHTML = `<b>✗ 回答错误。</b><br>你的答案：<span style="color:#b71c1c">${LETTERS[picked]}. ${q.options[picked]}</span><br>正确答案：<span style="color:#1b5e20"><b>${LETTERS[correctIdx]}. ${q.options[correctIdx]}</b></span>`;
+  }
+}
+
+/* ---------- 显示反馈（填空题） ---------- */
+function showFeedbackBlank(isCorrect, q, userInput) {
+  const fb = document.getElementById("feedback");
+  fb.className = "feedback show " + (isCorrect ? "ok" : "bad");
+  if (isCorrect) {
+    fb.innerHTML = `<b>✓ 回答正确！</b> 自动进入下一题...`;
+  } else {
+    fb.innerHTML = `<b>✗ 回答错误。</b><br>你的答案：<span style="color:#b71c1c">${userInput}</span><br>正确答案：<span style="color:#1b5e20"><b>${q.answer}</b></span>`;
+  }
+}
+
+/* ---------- 记录结果（选择题） ---------- */
+function recordResultChoice(isCorrect, q, picked, correctIdx) {
+  const idx = state.currentIndex;
+  state.answered++;
+  state.askedCount[idx] = (state.askedCount[idx] || 0) + 1;
+  if (isCorrect) {
+    state.correct++;
+  } else {
+    state.wrongCount[idx] = (state.wrongCount[idx] || 0) + 1;
+    state.wrongList.push({
+      type: "choice",
+      question: q.question,
+      yourAnswer: `${LETTERS[picked]}. ${q.options[picked]}`,
+      correctAnswer: `${LETTERS[correctIdx]}. ${q.options[correctIdx]}`
+    });
+  }
+  updateStats();
+}
+
+/* ---------- 记录结果（填空题） ---------- */
+function recordResultBlank(isCorrect, q, userInput) {
+  const idx = state.currentIndex;
+  state.answered++;
+  state.askedCount[idx] = (state.askedCount[idx] || 0) + 1;
+  if (isCorrect) {
+    state.correct++;
+  } else {
+    state.wrongCount[idx] = (state.wrongCount[idx] || 0) + 1;
+    state.wrongList.push({
+      type: "blank",
+      question: q.question,
+      yourAnswer: userInput,
+      correctAnswer: q.answer
+    });
+  }
+  updateStats();
+}
+
+/* ---------- 下一题 ---------- */
+function nextQuestion() {
+  const next = selectNext();
+  if (next < 0) { endQuiz(); return; }
+  state.currentIndex = next;
+  renderQuestion();
+}
+
+function updateStats() {
+  document.getElementById("answered").textContent = state.answered;
+  document.getElementById("correct").textContent = state.correct;
+  document.getElementById("wrong").textContent = state.answered - state.correct;
+}
+
+function endQuiz() {
+  document.getElementById("quiz-screen").style.display = "none";
+  document.getElementById("end-screen").style.display = "block";
+  const wrong = state.answered - state.correct;
+  const acc = state.answered > 0 ? Math.round(state.correct / state.answered * 100) : 0;
+  document.getElementById("end-total").textContent = state.answered;
+  document.getElementById("end-correct").textContent = state.correct;
+  document.getElementById("end-wrong").textContent = wrong;
+  document.getElementById("end-acc").textContent = acc + "%";
+  document.getElementById("acc-fill").style.width = acc + "%";
+
+  const wrongBox = document.getElementById("wrong-list");
+  const itemsBox = document.getElementById("wrong-items");
+  const noWrong = document.getElementById("no-wrong");
+  if (state.wrongList.length === 0) {
+    wrongBox.style.display = "none";
+    noWrong.style.display = "block";
+  } else {
+    wrongBox.style.display = "block";
+    noWrong.style.display = "none";
+    itemsBox.innerHTML = state.wrongList.map((w, i) => `
+      <div class="item">
+        <div class="q">${i + 1}. [${w.type === "choice" ? "选择" : "填空"}] ${w.question}</div>
+        <div class="ya">你的答案：${w.yourAnswer}</div>
+        <div class="a">正确答案：${w.correctAnswer}</div>
+      </div>
+    `).join("");
+  }
+}
+
+function restart() {
+  state.currentIndex = -1;
+  state.askedCount = [];
+  state.wrongCount = [];
+  state.wrongList = [];
+  state.answered = 0;
+  state.correct = 0;
+  state.answeredCurrent = false;
+  document.getElementById("end-screen").style.display = "none";
+  document.getElementById("quiz-screen").style.display = "block";
+  nextQuestion();
+}
+
+function init() {
+  state.askedCount = new Array(QUESTIONS.length).fill(0);
+  state.wrongCount = new Array(QUESTIONS.length).fill(0);
+  document.getElementById("total-q").textContent = QUESTIONS.length;
+  document.getElementById("next-btn").onclick = nextQuestion;
+  document.getElementById("stop-btn").onclick = endQuiz;
+  document.getElementById("restart-btn").onclick = restart;
+  nextQuestion();
+}
+
+init();
+</script>
+</body>
+</html>

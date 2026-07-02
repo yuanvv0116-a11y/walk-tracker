@@ -1,0 +1,1524 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+<title>遛弯儿记录</title>
+<!-- 百度地图 JS API -->
+<script type="text/javascript" src="https://api.map.baidu.com/api?v=3.0&ak=Xl4An3OfdBgmedm1xpavHzxzTTu64XmT"></script>
+<!-- Supabase JS SDK（云数据库） -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --bg-primary: #0f0f1a;
+  --bg-secondary: #1a1a2e;
+  --bg-card: rgba(30,30,50,0.75);
+  --bg-card-solid: #1e1e32;
+  --text-primary: #f0f0f5;
+  --text-secondary: #8888aa;
+  --text-muted: #555570;
+  --pink: #FF6B9D;
+  --pink-dim: rgba(255,107,157,0.15);
+  --blue: #4A90D9;
+  --blue-dim: rgba(74,144,217,0.15);
+  --dark: #a0a0b0;
+  --dark-dim: rgba(160,160,176,0.12);
+  --border: rgba(255,255,255,0.06);
+  --radius: 16px;
+  --radius-sm: 10px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: -apple-system, "PingFang SC", "SF Pro Text", "Helvetica Neue", sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  max-width: 480px;
+  margin: 0 auto;
+  position: relative;
+}
+.mono { font-family: "SF Mono", "Menlo", "Courier New", monospace; }
+
+/* ===== App Shell ===== */
+#app { height: 100%; display: flex; flex-direction: column; }
+.page { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 20px 100px; display: none; }
+.page.active { display: block; }
+
+/* ===== Tab Bar ===== */
+.tab-bar {
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: 480px;
+  display: flex; justify-content: space-around; align-items: center;
+  padding: 8px 0 calc(8px + var(--safe-bottom));
+  background: rgba(15,15,26,0.85);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
+  z-index: 1000;
+}
+.tab-item {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: none; border: none; color: var(--text-muted);
+  font-size: 10px; font-family: inherit; cursor: pointer; padding: 4px 16px;
+  transition: color .2s;
+}
+.tab-item.active { color: var(--text-primary); }
+.tab-item svg { width: 24px; height: 24px; stroke-width: 1.8; }
+
+/* ===== Header ===== */
+.page-header {
+  padding: 56px 0 20px; position: sticky; top: 0;
+  background: linear-gradient(var(--bg-primary) 60%, transparent);
+  z-index: 10;
+}
+.page-header h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+.page-header .sub { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+
+/* ===== Glass Card ===== */
+.glass {
+  background: var(--bg-card);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+}
+
+/* ===== Member Avatars ===== */
+.member-row { display: flex; gap: 14px; justify-content: center; margin: 20px 0; }
+.member-avatar {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  background: none; border: none; cursor: pointer; font-family: inherit;
+  transition: transform .15s;
+}
+.member-avatar:active { transform: scale(0.93); }
+.avatar-circle {
+  width: 52px; height: 52px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; font-weight: 600;
+  border: 3px solid transparent;
+  transition: border-color .2s, box-shadow .2s, background .2s;
+}
+.avatar-circle.pink-bg { background: var(--pink-dim); color: var(--pink); }
+.avatar-circle.blue-bg { background: var(--blue-dim); color: var(--blue); }
+.avatar-circle.dark-bg { background: var(--dark-dim); color: var(--dark); }
+.member-avatar.selected .avatar-circle.pink-bg { border-color: var(--pink); box-shadow: 0 0 16px rgba(255,107,157,0.35); }
+.member-avatar.selected .avatar-circle.blue-bg { border-color: var(--blue); box-shadow: 0 0 16px rgba(74,144,217,0.35); }
+.member-avatar.selected .avatar-circle.dark-bg { border-color: var(--dark); box-shadow: 0 0 16px rgba(160,160,176,0.25); }
+.member-avatar .name { font-size: 12px; color: var(--text-secondary); }
+.member-avatar.selected .name { color: var(--text-primary); font-weight: 600; }
+
+/* ===== Data Display ===== */
+.data-row { display: flex; gap: 12px; margin: 16px 0; }
+.data-card { flex: 1; text-align: center; }
+.data-card .value { font-size: 36px; font-weight: 700; line-height: 1.1; }
+.data-card .label { font-size: 11px; color: var(--text-muted); margin-top: 4px; letter-spacing: 0.5px; }
+
+/* ===== Map Container ===== */
+#map-container {
+  width: 100%; height: 200px; border-radius: var(--radius);
+  overflow: hidden; margin: 12px 0 8px;
+  border: 1px solid var(--border);
+  position: relative;
+}
+/* 百度地图 logo/版权 隐藏（仅美化，正式上线请保留） */
+.BMap_cpyCtrl, .anchorBL { display: none !important; }
+/* 地图下方工具栏 */
+.map-toolbar {
+  display: flex; justify-content: center; gap: 12px; margin-bottom: 12px;
+}
+.map-tool-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: rgba(255,255,255,0.08); border: 1px solid var(--border);
+  border-radius: 10px; padding: 6px 14px; cursor: pointer;
+  font-family: inherit; font-size: 11px; color: var(--text-secondary);
+  transition: all 0.2s;
+}
+.map-tool-btn:active { transform: scale(0.92); background: rgba(255,255,255,0.15); }
+.map-tool-btn svg {
+  width: 20px; height: 20px; stroke: #fff; stroke-width: 2;
+  fill: none; stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* ===== Control Button ===== */
+.control-area { display: flex; justify-content: center; gap: 20px; margin: 20px 0; }
+.ctrl-btn {
+  width: 64px; height: 64px; border-radius: 50%; border: none;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600;
+  transition: transform .15s, box-shadow .2s;
+  color: #fff;
+}
+.ctrl-btn:active { transform: scale(0.9); }
+.ctrl-btn.start { background: linear-gradient(135deg, #4CAF50, #2E7D32); box-shadow: 0 4px 20px rgba(76,175,80,0.4); }
+.ctrl-btn.pause { background: linear-gradient(135deg, #FF9800, #E65100); box-shadow: 0 4px 20px rgba(255,152,0,0.4); }
+.ctrl-btn.stop { background: linear-gradient(135deg, #f44336, #b71c1c); box-shadow: 0 4px 20px rgba(244,67,54,0.4); }
+.ctrl-btn.resume { background: linear-gradient(135deg, #4CAF50, #2E7D32); box-shadow: 0 4px 20px rgba(76,175,80,0.4); }
+.ctrl-btn:disabled { opacity: 0.3; cursor: not-allowed; transform: none; box-shadow: none; }
+.ctrl-btn svg { width: 28px; height: 28px; }
+
+/* ===== Segment Control ===== */
+.segment {
+  display: flex; background: var(--bg-card); border-radius: var(--radius-sm);
+  padding: 3px; border: 1px solid var(--border); margin: 12px 0;
+}
+.segment-btn {
+  flex: 1; padding: 8px 0; border: none; border-radius: 8px;
+  background: none; color: var(--text-muted); font-size: 13px;
+  font-family: inherit; font-weight: 500; cursor: pointer;
+  transition: all .2s;
+}
+.segment-btn.active { background: var(--bg-secondary); color: var(--text-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+
+/* ===== Date Range Picker ===== */
+.date-range { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
+.date-input {
+  flex: 1; padding: 10px 12px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--bg-card);
+  color: var(--text-primary); font-size: 14px; font-family: inherit;
+  outline: none;
+}
+.date-input:focus { border-color: var(--blue); }
+
+/* ===== Stats Cards Grid ===== */
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 14px 0; }
+.stat-card { padding: 12px 8px; }
+.stat-card .value { font-size: 22px; font-weight: 700; }
+.stat-card .label { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+
+/* ===== Member Stats ===== */
+.member-stat { margin: 10px 0; padding: 16px; }
+.member-stat-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.member-stat-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+}
+.member-stat-name { font-weight: 600; font-size: 15px; }
+.member-stat-row { display: flex; justify-content: space-between; margin: 6px 0; }
+.member-stat-row .label { font-size: 13px; color: var(--text-secondary); }
+.member-stat-row .val { font-size: 13px; font-weight: 600; }
+.progress-track {
+  height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px;
+  margin-top: 8px; overflow: hidden;
+}
+.progress-fill { height: 100%; border-radius: 2px; transition: width .6s ease; }
+
+/* ===== Trend Chart ===== */
+.trend-chart { margin: 14px 0; padding: 16px; }
+.trend-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+
+/* ===== History Filter ===== */
+.filter-member-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.filter-chip {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 16px;
+  border: 1px solid var(--border); background: rgba(255,255,255,0.05);
+  font-size: 13px; color: var(--text-secondary); cursor: pointer;
+  transition: all 0.2s; font-family: inherit;
+}
+.filter-chip.active { color: #fff; border-color: transparent; }
+.filter-chip .dot { width: 8px; height: 8px; border-radius: 50%; }
+.filter-time-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.chart-area { display: flex; align-items: flex-end; gap: 4px; height: 100px; }
+.chart-bar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.chart-bar {
+  width: 100%; max-width: 24px; border-radius: 4px 4px 0 0;
+  transition: height .4s ease; min-height: 2px;
+}
+.chart-label { font-size: 9px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40px; }
+
+/* ===== History List ===== */
+.history-item { margin: 10px 0; padding: 16px; display: flex; align-items: center; gap: 14px; cursor: pointer; transition: background .15s; }
+.history-item:active { background: rgba(255,255,255,0.03); }
+.history-date { min-width: 44px; text-align: center; }
+.history-date .day { font-size: 22px; font-weight: 700; line-height: 1.1; }
+.history-date .month { font-size: 10px; color: var(--text-muted); }
+.history-info { flex: 1; }
+.history-members { display: flex; gap: 4px; margin-bottom: 4px; }
+.history-dot { width: 8px; height: 8px; border-radius: 50%; }
+.history-stats { font-size: 12px; color: var(--text-secondary); display: flex; gap: 12px; }
+.history-delete {
+  background: none; border: none; color: var(--text-muted); cursor: pointer;
+  padding: 8px; font-size: 18px; font-family: inherit;
+  transition: color .15s;
+}
+.history-delete:active { color: #f44336; }
+
+/* ===== Record Detail Modal ===== */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  z-index: 2000; display: none; align-items: flex-end; justify-content: center;
+}
+.modal-overlay.show { display: flex; }
+.modal-content {
+  width: 100%; max-width: 480px; max-height: 85vh;
+  background: var(--bg-secondary); border-radius: var(--radius) var(--radius) 0 0;
+  padding: 24px 20px calc(24px + var(--safe-bottom));
+  overflow-y: auto;
+}
+.modal-handle { width: 36px; height: 4px; background: rgba(255,255,255,0.15); border-radius: 2px; margin: 0 auto 20px; }
+.modal-title { font-size: 20px; font-weight: 700; margin-bottom: 16px; }
+#detail-map { width: 100%; height: 220px; border-radius: var(--radius); overflow: hidden; margin: 12px 0; border: 1px solid var(--border); }
+#detail-map .BMap_cpyCtrl, #detail-map .anchorBL { display: none !important; }
+.detail-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.detail-row:last-child { border: none; }
+.detail-row .label { color: var(--text-secondary); font-size: 14px; }
+.detail-row .val { font-weight: 600; font-size: 14px; }
+
+/* ===== Empty State ===== */
+.empty { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+.empty svg { width: 48px; height: 48px; margin-bottom: 12px; opacity: 0.3; }
+.empty p { font-size: 14px; }
+
+/* ===== Toast ===== */
+.toast {
+  position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+  background: var(--bg-card-solid); color: var(--text-primary);
+  padding: 12px 24px; border-radius: 24px; font-size: 14px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.5); z-index: 3000;
+  opacity: 0; transition: opacity .3s;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; }
+
+/* ===== Custom Date Toggle ===== */
+.custom-toggle {
+  display: flex; align-items: center; gap: 8px;
+  background: none; border: none; color: var(--blue);
+  font-size: 13px; font-family: inherit; cursor: pointer;
+  padding: 6px 0; margin: 4px 0;
+}
+.custom-toggle svg { width: 16px; height: 16px; }
+
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar { width: 0; height: 0; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ===== 记录页 ===== -->
+  <div class="page active" id="page-record">
+    <div class="page-header">
+      <h1>遛弯儿记录</h1>
+      <div class="sub" id="today-date"></div>
+      <div id="cloud-badge" style="position:absolute;top:0;right:0;font-size:11px;font-weight:500;padding:4px 10px;border-radius:12px;background:rgba(255,255,255,0.05);border:1px solid var(--border)">◐ 本地</div>
+    </div>
+
+    <div class="glass" style="text-align:center">
+      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:4px">今天谁遛弯儿？</div>
+      <div class="member-row" id="member-select"></div>
+    </div>
+
+    <div class="data-row">
+      <div class="data-card">
+        <div class="value mono" id="display-time">00:00</div>
+        <div class="label">时长</div>
+      </div>
+      <div class="data-card">
+        <div class="value mono" id="display-dist">0.00</div>
+        <div class="label">距离 (km)</div>
+      </div>
+    </div>
+
+    <div id="map-container"></div>
+    <div class="map-toolbar">
+      <button class="map-tool-btn" id="btn-zoom-in" title="放大">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M21 21l-4.3-4.3"/></svg>
+        <span>放大</span>
+      </button>
+      <button class="map-tool-btn" id="btn-zoom-out" title="缩小">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M21 21l-4.3-4.3"/></svg>
+        <span>缩小</span>
+      </button>
+      <button class="map-tool-btn" id="btn-locate" title="回到定位">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+        <span>定位</span>
+      </button>
+    </div>
+
+    <div class="control-area" id="control-area">
+      <button class="ctrl-btn start" id="btn-start" onclick="startTracking()" disabled>
+        <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6,3 20,12 6,21"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ===== 统计页 ===== -->
+  <div class="page" id="page-stats">
+    <div class="page-header">
+      <h1>数据统计</h1>
+      <div class="sub">查看遛弯儿出勤与运动数据</div>
+    </div>
+
+    <div class="segment" id="time-segment">
+      <button class="segment-btn active" data-range="day">日</button>
+      <button class="segment-btn" data-range="week">周</button>
+      <button class="segment-btn" data-range="month">月</button>
+      <button class="segment-btn" data-range="year">年</button>
+    </div>
+
+    <button class="custom-toggle" id="custom-toggle" onclick="toggleCustomDate()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      自定义时间范围
+    </button>
+    <div class="date-range" id="custom-date-range" style="display:none">
+      <input type="date" class="date-input" id="date-from">
+      <span style="color:var(--text-muted);font-size:13px">至</span>
+      <input type="date" class="date-input" id="date-to">
+    </div>
+
+    <div class="stats-grid">
+      <div class="glass stat-card">
+        <div class="value mono" id="stat-count" style="color:var(--pink)">0</div>
+        <div class="label">总次数</div>
+      </div>
+      <div class="glass stat-card">
+        <div class="value mono" id="stat-duration" style="color:var(--blue)">0</div>
+        <div class="label">总时长 (min)</div>
+      </div>
+      <div class="glass stat-card">
+        <div class="value mono" id="stat-distance" style="color:#4CAF50">0</div>
+        <div class="label">总距离 (km)</div>
+      </div>
+    </div>
+
+    <div id="member-stats-container"></div>
+  </div>
+
+  <!-- ===== 历史页 ===== -->
+  <div class="page" id="page-history">
+    <div class="page-header">
+      <h1>历史记录</h1>
+      <div class="sub">所有遛弯儿记录</div>
+    </div>
+    <div class="glass" style="padding:12px;margin-bottom:12px">
+      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:8px">按成员筛选</div>
+      <div class="filter-member-row" id="filter-members"></div>
+      <div style="font-size:13px;color:var(--text-secondary);margin:10px 0 6px">按时间筛选</div>
+      <div class="segment" id="filter-time">
+        <button class="segment-btn active" data-range="all" onclick="setHistoryTimeFilter('all')">全部</button>
+        <button class="segment-btn" data-range="week" onclick="setHistoryTimeFilter('week')">本周</button>
+        <button class="segment-btn" data-range="month" onclick="setHistoryTimeFilter('month')">本月</button>
+        <button class="segment-btn" data-range="year" onclick="setHistoryTimeFilter('year')">今年</button>
+      </div>
+      <div class="date-range" id="history-custom-range" style="display:none;margin-top:8px">
+        <input type="date" class="date-input" id="history-date-from">
+        <span style="color:var(--text-muted);font-size:13px">至</span>
+        <input type="date" class="date-input" id="history-date-to">
+      </div>
+    </div>
+    <div id="history-list"></div>
+  </div>
+
+  <!-- ===== Tab Bar ===== -->
+  <div class="tab-bar">
+    <button class="tab-item active" data-page="record" onclick="switchPage('record')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><polyline points="12,7 12,12 15,15"/></svg>
+      记录
+    </button>
+    <button class="tab-item" data-page="stats" onclick="switchPage('stats')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="12" width="4" height="9" rx="1"/><rect x="10" y="7" width="4" height="14" rx="1"/><rect x="17" y="3" width="4" height="18" rx="1"/></svg>
+      统计
+    </button>
+    <button class="tab-item" data-page="history" onclick="switchPage('history')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><polyline points="12,6 12,12 16,14"/></svg>
+      历史
+    </button>
+  </div>
+</div>
+
+<!-- ===== Detail Modal ===== -->
+<div class="modal-overlay" id="detail-modal" onclick="closeDetail(event)">
+  <div class="modal-content" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="detail-title"></div>
+    <div id="detail-map"></div>
+    <div id="detail-info"></div>
+  </div>
+</div>
+
+<!-- ===== Toast ===== -->
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================================
+ *  常量与成员定义
+ * ========================================================================= */
+const MEMBERS = {
+  zhang: { name: "小张", color: "#FF6B9D", colorDim: "var(--pink-dim)", bgClass: "pink-bg", initial: "张" },
+  liu:   { name: "小刘", color: "#4A90D9", colorDim: "var(--blue-dim)", bgClass: "blue-bg", initial: "刘" },
+  yuan:  { name: "小袁", color: "#a0a0b0", colorDim: "var(--dark-dim)", bgClass: "dark-bg", initial: "袁" }
+};
+
+const STORAGE_KEY = "walk_records";
+
+/* ===== Supabase 云数据库配置 ===== */
+// 请替换为你自己的 Supabase 项目 URL 和 anon key（注册步骤见下方说明）
+const SUPABASE_URL = "请替换为你的Supabase项目URL";   // 例: https://xxxxx.supabase.co
+const SUPABASE_ANON_KEY = "请替换为你的Supabase anon key";
+
+// 初始化 Supabase 客户端（配置正确后自动生效）
+let supabaseClient = null;
+if (typeof window.supabase !== "undefined" && SUPABASE_URL.startsWith("https://") && SUPABASE_ANON_KEY.length > 20) {
+  try {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    console.log("[云数据库] Supabase 初始化成功");
+  } catch (e) {
+    console.warn("[云数据库] Supabase 初始化失败，将使用本地存储:", e.message);
+  }
+}
+// 是否启用云数据库
+const USE_CLOUD = supabaseClient !== null;
+
+/* =========================================================================
+ *  应用状态
+ * ========================================================================= */
+const app = {
+  selectedMembers: new Set(),
+  tracking: false,
+  paused: false,
+  watchId: null,
+  startTime: null,
+  pauseStart: null,
+  totalPaused: 0,
+  elapsed: 0,
+  distance: 0,
+  track: [],
+  lastPos: null,
+  timerInterval: null,
+  map: null,
+  polyline: null,
+  currentMarker: null,
+  memberMarkers: [],       // 选中成员的标记
+  mapZoomed: false,        // 地图是否处于放大状态
+  currentCenter: null,     // 当前定位中心（BD09）
+  detailMap: null,
+  statsRange: "day"
+};
+
+/* =========================================================================
+ *  工具函数
+ * ========================================================================= */
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+function formatDuration(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function formatDurationLong(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m} 分钟`;
+}
+
+function formatDate(dateStr) {
+  const d = new Date(dateStr);
+  const months = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
+  return { day: d.getDate(), month: months[d.getMonth()] };
+}
+
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+/* =========================================================================
+ *  数据持久化（本地缓存 + Supabase 云端同步）
+ *  策略：读取走本地缓存（同步），写入同时更新缓存和云端（异步）
+ *  应用启动/切页时从云端拉取最新数据覆盖缓存
+ * ========================================================================= */
+function loadRecords() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
+  catch { return []; }
+}
+
+function saveRecords(records) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+}
+
+function addRecord(record) {
+  // 1. 立即写入本地缓存（同步可见）
+  const records = loadRecords();
+  records.push(record);
+  saveRecords(records);
+  // 2. 异步写入云端
+  if (USE_CLOUD) {
+    supabaseClient.from("walk_records")
+      .insert({ id: record.id, data: record })
+      .then(({ error }) => {
+        if (error) console.warn("[云数据库] 保存失败:", error.message);
+        else console.log("[云数据库] 已保存记录", record.id);
+      });
+  }
+}
+
+function deleteRecord(id) {
+  // 1. 立即更新本地缓存
+  const records = loadRecords().filter(r => r.id !== id);
+  saveRecords(records);
+  // 2. 异步删除云端
+  if (USE_CLOUD) {
+    supabaseClient.from("walk_records")
+      .delete().eq("id", id)
+      .then(({ error }) => {
+        if (error) console.warn("[云数据库] 删除失败:", error.message);
+        else console.log("[云数据库] 已删除记录", id);
+      });
+  }
+}
+
+// 从云端拉取全部记录，覆盖本地缓存
+async function syncFromCloud() {
+  if (!USE_CLOUD) return false;
+  try {
+    const { data, error } = await supabaseClient.from("walk_records").select("data");
+    if (error) throw error;
+    const records = (data || []).map(row => row.data).sort((a, b) => a.startTime - b.startTime);
+    saveRecords(records);
+    console.log(`[云数据库] 已同步 ${records.length} 条记录`);
+    return true;
+  } catch (e) {
+    console.warn("[云数据库] 同步失败，使用本地缓存:", e.message);
+    return false;
+  }
+}
+
+// 显示云端同步状态徽标
+function updateCloudBadge() {
+  const badge = document.getElementById("cloud-badge");
+  if (!badge) return;
+  if (USE_CLOUD) {
+    badge.textContent = "☁ 已连云";
+    badge.style.color = "var(--pink)";
+  } else {
+    badge.textContent = "◐ 本地";
+    badge.style.color = "var(--text-muted)";
+  }
+}
+
+/* =========================================================================
+ *  页面切换
+ * ========================================================================= */
+function switchPage(name) {
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  document.getElementById(`page-${name}`).classList.add("active");
+  document.querySelectorAll(".tab-item").forEach(t => t.classList.toggle("active", t.dataset.page === name));
+
+  // 统计/历史页：先从云端同步，再刷新UI（同步失败则用本地缓存）
+  if (name === "stats" || name === "history") {
+    if (USE_CLOUD) {
+      showToast("同步中...");
+      syncFromCloud().finally(() => {
+        if (name === "stats") refreshStats();
+        if (name === "history") refreshHistory();
+      });
+    } else {
+      if (name === "stats") refreshStats();
+      if (name === "history") refreshHistory();
+    }
+  }
+
+  // 百度地图：切回记录页时检查地图是否需要重绘
+  if (name === "record" && app.map) {
+    setTimeout(() => { if (app.map.checkResize) app.map.checkResize(); }, 100);
+  }
+}
+
+/* =========================================================================
+ *  记录页 - 成员选择
+ * ========================================================================= */
+function renderMemberSelect() {
+  const container = document.getElementById("member-select");
+  container.innerHTML = "";
+  Object.entries(MEMBERS).forEach(([key, m]) => {
+    const btn = document.createElement("button");
+    btn.className = "member-avatar";
+    btn.dataset.member = key;
+    btn.innerHTML = `
+      <div class="avatar-circle ${m.bgClass}">${m.initial}</div>
+      <div class="name">${m.name}</div>
+    `;
+    btn.onclick = () => toggleMember(key, btn);
+    container.appendChild(btn);
+  });
+}
+
+function toggleMember(key, btn) {
+  if (app.tracking) return; // 追踪中不可切换
+  if (app.selectedMembers.has(key)) {
+    app.selectedMembers.delete(key);
+    btn.classList.remove("selected");
+  } else {
+    app.selectedMembers.add(key);
+    btn.classList.add("selected");
+  }
+  document.getElementById("btn-start").disabled = app.selectedMembers.size === 0;
+  // 未开始追踪时，在地图上预览选中的成员（用当前定位）
+  if (!app.tracking && app.currentCenter) {
+    showMembersOnMap(app.currentCenter.lng, app.currentCenter.lat);
+  } else if (app.selectedMembers.size === 0) {
+    // 取消选中后清除地图上的成员标记
+    app.memberMarkers.forEach(m => app.map && app.map.removeOverlay(m));
+    app.memberMarkers = [];
+  }
+}
+
+/* =========================================================================
+ *  坐标转换：WGS84(GPS原始) → BD09(百度坐标)
+ *  浏览器 Geolocation API 返回 WGS84，百度地图需要 BD09
+ * ========================================================================= */
+const x_PI = 3.14159265358979324 * 3000.0 / 180.0;
+const PI = 3.1415926535897932384626;
+const a = 6378245.0;
+const ee = 0.00669342162296594323;
+
+function wgs84togcj02(lng, lat) {
+  let dlat = transformlat(lng - 105.0, lat - 35.0);
+  let dlng = transformlng(lng - 105.0, lat - 35.0);
+  const radlat = lat / 180.0 * PI;
+  let magic = Math.sin(radlat);
+  magic = 1 - ee * magic * magic;
+  const sqrtmagic = Math.sqrt(magic);
+  dlat = (dlat * 180.0) / ((a * (1 - ee)) / (magic * sqrtmagic) * PI);
+  dlng = (dlng * 180.0) / (a / sqrtmagic * Math.cos(radlat) * PI);
+  return [lng + dlng, lat + dlat];
+}
+
+function transformlat(lng, lat) {
+  let ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * Math.sqrt(Math.abs(lng));
+  ret += (20.0 * Math.sin(6.0 * lng * PI) + 20.0 * Math.sin(2.0 * lng * PI)) * 2.0 / 3.0;
+  ret += (20.0 * Math.sin(lat * PI) + 40.0 * Math.sin(lat / 3.0 * PI)) * 2.0 / 3.0;
+  ret += (160.0 * Math.sin(lat / 12.0 * PI) + 320 * Math.sin(lat * PI / 30.0)) * 2.0 / 3.0;
+  return ret;
+}
+
+function transformlng(lng, lat) {
+  let ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * Math.sqrt(Math.abs(lng));
+  ret += (20.0 * Math.sin(6.0 * lng * PI) + 20.0 * Math.sin(2.0 * lng * PI)) * 2.0 / 3.0;
+  ret += (20.0 * Math.sin(lng * PI) + 40.0 * Math.sin(lng / 3.0 * PI)) * 2.0 / 3.0;
+  ret += (150.0 * Math.sin(lng / 12.0 * PI) + 300.0 * Math.sin(lng / 30.0 * PI)) * 2.0 / 3.0;
+  return ret;
+}
+
+function gcj02tobd09(lng, lat) {
+  const z = Math.sqrt(lng * lng + lat * lat) + 0.00002 * Math.sin(lat * x_PI);
+  const theta = Math.atan2(lat, lng) + 0.000003 * Math.cos(lng * x_PI);
+  return [z * Math.cos(theta), z * Math.sin(theta)];
+}
+
+function wgs84tobd09(lng, lat) {
+  const [glng, glat] = wgs84togcj02(lng, lat);
+  return gcj02tobd09(glng, glat);
+}
+
+/* =========================================================================
+ *  记录页 - 地图初始化（百度地图）
+ * ========================================================================= */
+function initMap() {
+  const container = document.getElementById("map-container");
+
+  // 检查百度地图 SDK 是否加载成功
+  if (typeof BMap === "undefined" || !BMap.Map) {
+    container.innerHTML =
+      '<div style="display:flex;height:100%;align-items:center;justify-content:center;color:var(--text-muted);font-size:13px;padding:20px;text-align:center;line-height:1.6">百度地图 SDK 未加载<br>请检查 AK 配置</div>';
+    console.error("[地图] BMap 未定义，AK 可能无效或被 Referer 拦截");
+    return;
+  }
+
+  // 确保容器有尺寸
+  const w = container.offsetWidth;
+  const h = container.offsetHeight;
+  console.log("[地图] 容器尺寸:", w, "x", h);
+  if (w === 0 || h === 0) {
+    console.warn("[地图] 容器尺寸为0，延迟重试");
+    setTimeout(initMap, 200);
+    return;
+  }
+
+  try {
+    app.map = new BMap.Map("map-container");
+    const defaultPoint = new BMap.Point(116.404, 39.915); // 天安门
+    app.map.centerAndZoom(defaultPoint, 14);
+    app.map.enableScrollWheelZoom(true);
+    console.log("[地图] 初始化成功");
+
+    // 用百度地图自带定位 API 定位到当前位置
+    baiduLocate();
+
+    // 绑定工具栏按钮
+    bindMapToolbar();
+  } catch (e) {
+    console.error("[地图] 初始化异常:", e);
+    container.innerHTML =
+      '<div style="display:flex;height:100%;align-items:center;justify-content:center;color:var(--text-muted);font-size:13px;padding:20px;text-align:center;line-height:1.6">地图初始化异常<br>' + e.message + '</div>';
+  }
+}
+
+// 定位：优先百度地图 Geolocation（PC 用 IP，手机用 GPS），失败再试浏览器原生
+function baiduLocate() {
+  if (!app.map) { showToast("地图未就绪"); return; }
+  showToast("正在定位...");
+
+  // 方式1：百度地图 Geolocation API（内置 IP 定位，不依赖系统 GPS 权限）
+  if (typeof BMap !== "undefined" && BMap.Geolocation) {
+    const geo = new BMap.Geolocation();
+    geo.getCurrentPosition((result) => {
+      if (geo.getStatus() === BMAP_STATUS_SUCCESS) {
+        const pt = result.point;
+        app.currentCenter = { lng: pt.lng, lat: pt.lat };
+        if (app.locMarker) {
+          app.map.removeOverlay(app.locMarker.marker);
+          app.map.removeOverlay(app.locMarker.circle);
+        }
+        app.locMarker = addLocationMarker(pt.lng, pt.lat, 2000);
+        app.map.setZoom(16);
+        app.map.panTo(pt);
+        setTimeout(() => { if (app.map) app.map.centerAndZoom(pt, 16); }, 150);
+        if (app.selectedMembers.size > 0) showMembersOnMap(pt.lng, pt.lat);
+        showToast("已定位到当前位置");
+        console.log("[地图] 百度定位成功:", pt.lng, pt.lat);
+      } else {
+        // 方式2：百度失败，试浏览器原生 GPS
+        console.warn("[地图] 百度定位失败:", geo.getStatus(), "尝试浏览器GPS");
+        browserLocate();
+      }
+    }, { enableHighAccuracy: true });
+  } else {
+    browserLocate();
+  }
+}
+
+// 浏览器原生 GPS 定位（手机上精度高）
+function browserLocate() {
+  if (!navigator.geolocation) { showToast("浏览器不支持定位"); return; }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const [bdLng, bdLat] = wgs84tobd09(pos.coords.longitude, pos.coords.latitude);
+      const accuracy = pos.coords.accuracy || 100;
+      app.currentCenter = { lng: bdLng, lat: bdLat };
+      if (app.locMarker) {
+        app.map.removeOverlay(app.locMarker.marker);
+        app.map.removeOverlay(app.locMarker.circle);
+      }
+      app.locMarker = addLocationMarker(bdLng, bdLat, accuracy);
+      const pt = new BMap.Point(bdLng, bdLat);
+      app.map.setZoom(17);
+      app.map.panTo(pt);
+      setTimeout(() => { if (app.map) app.map.centerAndZoom(pt, 17); }, 150);
+      if (app.selectedMembers.size > 0) showMembersOnMap(bdLng, bdLat);
+      showToast("已定位到当前位置（精度" + Math.round(accuracy) + "米）");
+      console.log("[地图] GPS定位成功:", bdLng, bdLat);
+    },
+    (err) => {
+      const msg = { 1: "定位权限被拒绝，请在系统设置开启浏览器定位", 2: "位置信息不可用", 3: "定位超时" }[err.code] || "定位失败";
+      showToast(msg);
+      console.error("[地图] 浏览器定位失败:", err.code, err.message);
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+  );
+}
+
+// 添加定位标记（红色中心点 + 精度圈，类似百度地图 APP 的效果）
+function addLocationMarker(lng, lat, accuracy) {
+  // 中心红点（用 Canvas 生成）
+  const size = 20;
+  const canvas = document.createElement("canvas");
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  ctx.beginPath();
+  ctx.arc(size/2, size/2, size/2 - 1, 0, Math.PI * 2);
+  ctx.fillStyle = "#fff";
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(size/2, size/2, size/2 - 4, 0, Math.PI * 2);
+  ctx.fillStyle = "#FF3B30";
+  ctx.fill();
+  const icon = new BMap.Icon(canvas.toDataURL("image/png"),
+    new BMap.Size(size, size), { anchor: new BMap.Size(size/2, size/2) });
+  const marker = new BMap.Marker(new BMap.Point(lng, lat), { icon: icon });
+
+  // 精度圆圈
+  const circle = new BMap.Circle(new BMap.Point(lng, lat), Math.min(accuracy, 500), {
+    strokeColor: "#FF3B30", strokeWeight: 1, strokeOpacity: 0.4,
+    fillColor: "#FF3B30", fillOpacity: 0.12
+  });
+  app.map.addOverlay(circle);
+  app.map.addOverlay(marker);
+  return { marker, circle };
+}
+
+// 绑定地图工具栏按钮（放大、缩小、回到定位）
+function bindMapToolbar() {
+  const btnZoomIn = document.getElementById("btn-zoom-in");
+  const btnZoomOut = document.getElementById("btn-zoom-out");
+  const btnLocate = document.getElementById("btn-locate");
+
+  if (btnZoomIn) {
+    btnZoomIn.addEventListener("click", () => {
+      if (!app.map) return;
+      const z = app.map.getZoom();
+      app.map.setZoom(Math.min(z + 2, 19));
+    });
+  }
+  if (btnZoomOut) {
+    btnZoomOut.addEventListener("click", () => {
+      if (!app.map) return;
+      const z = app.map.getZoom();
+      app.map.setZoom(Math.max(z - 2, 3));
+    });
+  }
+  if (btnLocate) {
+    btnLocate.addEventListener("click", () => {
+      if (!app.map) return;
+      baiduLocate();
+    });
+  }
+}
+
+// 用 Canvas 生成成员头像图标（避免 data URI 兼容问题）
+function createMemberIcon(color, initial) {
+  const size = 32;
+  const canvas = document.createElement("canvas");
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  // 外圈白色描边
+  ctx.beginPath();
+  ctx.arc(size/2, size/2, size/2 - 1, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  // 内圈彩色填充
+  ctx.beginPath();
+  ctx.arc(size/2, size/2, size/2 - 3, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  // 姓氏首字
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 14px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(initial, size/2, size/2 + 1);
+  const url = canvas.toDataURL("image/png");
+  return new BMap.Icon(url, new BMap.Size(size, size), {
+    anchor: new BMap.Size(size/2, size/2)
+  });
+}
+
+// 在地图上显示选中的成员（用各自颜色的圆形标记）
+function showMembersOnMap(bdLng, bdLat) {
+  if (!app.map || typeof BMap === "undefined" || !BMap.Marker) return;
+  // 清除旧标记
+  app.memberMarkers.forEach(m => { try { app.map.removeOverlay(m); } catch(e){} });
+  app.memberMarkers = [];
+
+  const members = Array.from(app.selectedMembers);
+  const n = members.length;
+  if (n === 0) return;
+
+  // 多人时稍微错开位置，避免完全重叠
+  members.forEach((name, i) => {
+    const offset = (i - (n - 1) / 2) * 0.0003; // 经度微调
+    const pt = new BMap.Point(bdLng + offset, bdLat);
+    const m = MEMBERS[name];
+    const icon = createMemberIcon(m.color, m.initial);
+    const marker = new BMap.Marker(pt, { icon: icon });
+    app.map.addOverlay(marker);
+    app.memberMarkers.push(marker);
+    console.log("[地图] 添加成员标记:", name, "at", bdLng + offset, bdLat);
+  });
+}
+
+/* =========================================================================
+ *  记录页 - GPS 追踪
+ * ========================================================================= */
+function startTracking() {
+  if (app.selectedMembers.size === 0) { showToast("请先选择参与成员"); return; }
+  if (!navigator.geolocation) { showToast("浏览器不支持定位"); return; }
+
+  app.tracking = true;
+  app.paused = false;
+  app.startTime = Date.now();
+  app.totalPaused = 0;
+  app.distance = 0;
+  app.track = [];
+  app.lastPos = null;
+
+  // Update UI
+  renderControlButtons("tracking");
+  disableMemberSelect(true);
+
+  // Start GPS watch
+  app.watchId = navigator.geolocation.watchPosition(
+    onPositionUpdate,
+    onPositionError,
+    { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
+  );
+
+  // Start timer
+  app.timerInterval = setInterval(updateTimer, 1000);
+
+  // 百度地图：初始化轨迹折线和当前位置标记（地图不可用时跳过）
+  if (app.map && typeof BMap !== "undefined" && BMap.Map) {
+    app.polyline = new BMap.Polyline([], { strokeColor: "#4CAF50", strokeWeight: 5, strokeOpacity: 0.85 });
+    app.map.addOverlay(app.polyline);
+    app.currentMarker = new BMap.Marker(new BMap.Point(116.404, 39.915));
+    app.map.addOverlay(app.currentMarker);
+  }
+
+  showToast("开始记录");
+}
+
+function onPositionUpdate(pos) {
+  if (!app.tracking || app.paused) return;
+  const { latitude: lat, longitude: lng } = pos.coords;
+  const point = { lat, lng, ts: Date.now() };
+  app.track.push(point);
+
+  // WGS84 → BD09 坐标转换 + 更新地图（地图不可用时跳过）
+  if (app.map && app.polyline && typeof BMap !== "undefined" && BMap.Map) {
+    const [bdLng, bdLat] = wgs84tobd09(lng, lat);
+    const bdPoint = new BMap.Point(bdLng, bdLat);
+    const points = app.polyline.getPath();
+    points.push(bdPoint);
+    app.polyline.setPath(points);
+    app.currentMarker.setPosition(bdPoint);
+    app.currentCenter = { lng: bdLng, lat: bdLat };
+    app.map.panTo(bdPoint);
+    // 在地图上显示选中的成员（各自颜色的标记）
+    showMembersOnMap(bdLng, bdLat);
+  }
+
+  // Calculate distance（用 WGS84 原始坐标计算，更准确）
+  if (app.lastPos) {
+    const d = haversine(app.lastPos.lat, app.lastPos.lng, lat, lng);
+    if (d < 500) { // 过滤异常点（>500m视为GPS跳点）
+      app.distance += d;
+    }
+  }
+  app.lastPos = point;
+
+  // Update display
+  document.getElementById("display-dist").textContent = (app.distance / 1000).toFixed(2);
+}
+
+function onPositionError(err) {
+  if (err.code === 1) showToast("定位权限被拒绝");
+}
+
+function updateTimer() {
+  if (!app.tracking || app.paused) return;
+  app.elapsed = Math.floor((Date.now() - app.startTime - app.totalPaused) / 1000);
+  document.getElementById("display-time").textContent = formatDuration(app.elapsed);
+}
+
+function pauseTracking() {
+  app.paused = true;
+  app.pauseStart = Date.now();
+  renderControlButtons("paused");
+}
+
+function resumeTracking() {
+  if (app.pauseStart) {
+    app.totalPaused += Date.now() - app.pauseStart;
+    app.pauseStart = null;
+  }
+  app.paused = false;
+  renderControlButtons("tracking");
+}
+
+function stopTracking() {
+  app.tracking = false;
+  app.paused = false;
+  clearInterval(app.timerInterval);
+
+  if (app.watchId !== null) {
+    navigator.geolocation.clearWatch(app.watchId);
+    app.watchId = null;
+  }
+
+  // Final elapsed
+  app.elapsed = Math.floor((Date.now() - app.startTime - app.totalPaused) / 1000);
+
+  // Save record
+  const record = {
+    id: String(Date.now()),
+    date: todayStr(),
+    startTime: app.startTime,
+    endTime: Date.now(),
+    duration: app.elapsed,
+    distance: Math.round(app.distance),
+    members: Array.from(app.selectedMembers),
+    track: app.track,
+    pausedDuration: Math.round(app.totalPaused / 1000)
+  };
+
+  addRecord(record);
+  showToast("记录已保存");
+
+  // Reset UI
+  resetRecordPage();
+}
+
+function resetRecordPage() {
+  app.selectedMembers.clear();
+  app.tracking = false;
+  app.paused = false;
+  app.distance = 0;
+  app.elapsed = 0;
+  app.track = [];
+  app.lastPos = null;
+
+  document.getElementById("display-time").textContent = "00:00";
+  document.getElementById("display-dist").textContent = "0.00";
+
+  if (app.polyline && app.map) { app.map.removeOverlay(app.polyline); app.polyline = null; }
+  if (app.currentMarker && app.map) { app.map.removeOverlay(app.currentMarker); app.currentMarker = null; }
+
+  renderMemberSelect();
+  renderControlButtons("idle");
+  disableMemberSelect(false);
+}
+
+function disableMemberSelect(disabled) {
+  document.querySelectorAll(".member-avatar").forEach(btn => {
+    btn.style.opacity = disabled ? "0.5" : "1";
+    btn.style.pointerEvents = disabled ? "none" : "auto";
+  });
+}
+
+function renderControlButtons(state) {
+  const area = document.getElementById("control-area");
+  if (state === "idle") {
+    area.innerHTML = `
+      <button class="ctrl-btn start" id="btn-start" onclick="startTracking()" ${app.selectedMembers.size === 0 ? 'disabled' : ''}>
+        <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6,3 20,12 6,21"/></svg>
+      </button>`;
+  } else if (state === "tracking") {
+    area.innerHTML = `
+      <button class="ctrl-btn pause" onclick="pauseTracking()">
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+      </button>
+      <button class="ctrl-btn stop" onclick="stopTracking()">
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+      </button>`;
+  } else if (state === "paused") {
+    area.innerHTML = `
+      <button class="ctrl-btn resume" onclick="resumeTracking()">
+        <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6,3 20,12 6,21"/></svg>
+      </button>
+      <button class="ctrl-btn stop" onclick="stopTracking()">
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+      </button>`;
+  }
+}
+
+/* =========================================================================
+ *  统计页
+ * ========================================================================= */
+function getDateRange(type) {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let from, to;
+
+  if (type === "day") {
+    from = today; to = new Date(today.getTime() + 86400000 - 1);
+  } else if (type === "week") {
+    const day = today.getDay() || 7;
+    from = new Date(today.getTime() - (day - 1) * 86400000);
+    to = new Date(from.getTime() + 7 * 86400000 - 1);
+  } else if (type === "month") {
+    from = new Date(now.getFullYear(), now.getMonth(), 1);
+    to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+  } else if (type === "year") {
+    from = new Date(now.getFullYear(), 0, 1);
+    to = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+  }
+
+  return { from, to, fromStr: dateToStr(from), toStr: dateToStr(to) };
+}
+
+// Date → "YYYY-MM-DD" 字符串（本地时区）
+function dateToStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// 用字符串比较日期，避免时区问题（r.date 是 "YYYY-MM-DD" 格式）
+function filterRecords(from, to) {
+  const records = loadRecords();
+  const fromStr = dateToStr(from);
+  const toStr = dateToStr(to);
+  return records.filter(r => r.date >= fromStr && r.date <= toStr);
+}
+
+function toggleCustomDate() {
+  const el = document.getElementById("custom-date-range");
+  el.style.display = el.style.display === "none" ? "flex" : "none";
+}
+
+function refreshStats() {
+  let fromStr, toStr;
+  const customFrom = document.getElementById("date-from").value;
+  const customTo = document.getElementById("date-to").value;
+
+  if (customFrom && customTo && document.getElementById("custom-date-range").style.display !== "none") {
+    // 自定义日期范围，直接用字符串比较
+    fromStr = customFrom;
+    toStr = customTo;
+  } else {
+    const range = getDateRange(app.statsRange);
+    fromStr = range.fromStr;
+    toStr = range.toStr;
+  }
+
+  const records = loadRecords().filter(r => r.date >= fromStr && r.date <= toStr);
+
+  // Overview stats: 总次数 / 总时长 / 总距离
+  const totalDuration = records.reduce((s, r) => s + r.duration, 0);
+  const totalDistance = records.reduce((s, r) => s + r.distance, 0);
+
+  document.getElementById("stat-count").textContent = records.length;
+  document.getElementById("stat-duration").textContent = Math.round(totalDuration / 60);
+  document.getElementById("stat-distance").textContent = (totalDistance / 1000).toFixed(1);
+
+  // 统计的总天数 = 有任意人遛弯的日期数
+  const allDates = new Set(records.map(r => r.date));
+  const totalDays = allDates.size;
+
+  // Member stats
+  const container = document.getElementById("member-stats-container");
+  container.innerHTML = "";
+
+  const memberStats = {};
+  Object.keys(MEMBERS).forEach(key => {
+    const memberRecords = records.filter(r => r.members.includes(key));
+    const dates = new Set(memberRecords.map(r => r.date));
+    const dur = memberRecords.reduce((s, r) => s + r.duration, 0);
+    const dist = memberRecords.reduce((s, r) => s + r.distance, 0);
+    memberStats[key] = {
+      days: dates.size,                 // 出勤天数
+      duration: dur,                    // 总时长
+      distance: dist,                   // 总距离
+      absentDays: Math.max(0, totalDays - dates.size)  // 缺勤天数
+    };
+  });
+
+  Object.entries(MEMBERS).forEach(([key, m]) => {
+    const s = memberStats[key];
+    const card = document.createElement("div");
+    card.className = "glass member-stat";
+    card.innerHTML = `
+      <div class="member-stat-header">
+        <div class="member-stat-dot" style="background:${m.color}"></div>
+        <div class="member-stat-name">${m.name}</div>
+      </div>
+      <div class="member-stat-row"><span class="label">出勤天数</span><span class="val mono">${s.days} 天</span></div>
+      <div class="member-stat-row"><span class="label">缺勤天数</span><span class="val mono" style="color:#FF6B6B">${s.absentDays} 天</span></div>
+      <div class="member-stat-row"><span class="label">总时长</span><span class="val mono">${formatDurationLong(s.duration)}</span></div>
+      <div class="member-stat-row"><span class="label">总距离</span><span class="val mono">${(s.distance / 1000).toFixed(2)} km</span></div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+function renderTrendChart(records) {
+  const container = document.getElementById("trend-chart");
+  container.innerHTML = "";
+
+  // Group by date
+  const byDate = {};
+  records.forEach(r => {
+    if (!byDate[r.date]) byDate[r.date] = 0;
+    byDate[r.date] += r.distance;
+  });
+
+  const dates = Object.keys(byDate).sort();
+  if (dates.length === 0) {
+    container.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:20px">暂无数据</div>';
+    return;
+  }
+
+  const maxDist = Math.max(1, ...Object.values(byDate));
+  const showDates = dates.slice(-14); // 最近14天
+
+  showDates.forEach(date => {
+    const dist = byDate[date] || 0;
+    const h = Math.max(2, (dist / maxDist) * 80);
+    const d = new Date(date);
+    const label = `${d.getMonth()+1}/${d.getDate()}`;
+
+    const wrap = document.createElement("div");
+    wrap.className = "chart-bar-wrap";
+    wrap.innerHTML = `
+      <div class="chart-bar mono" style="height:${h}px;background:var(--blue)" title="${(dist/1000).toFixed(2)}km"></div>
+      <div class="chart-label">${label}</div>
+    `;
+    container.appendChild(wrap);
+  });
+}
+
+// Segment control
+document.getElementById("time-segment").addEventListener("click", e => {
+  const btn = e.target.closest(".segment-btn");
+  if (!btn) return;
+  document.querySelectorAll("#time-segment .segment-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  app.statsRange = btn.dataset.range;
+  document.getElementById("custom-date-range").style.display = "none";
+  refreshStats();
+});
+
+// Custom date inputs
+document.getElementById("date-from").addEventListener("change", refreshStats);
+document.getElementById("date-to").addEventListener("change", refreshStats);
+
+/* =========================================================================
+ *  历史页
+ * ========================================================================= */
+function refreshHistory() {
+  const container = document.getElementById("history-list");
+  let records = loadRecords().sort((a, b) => b.startTime - a.startTime);
+
+  // 应用筛选
+  records = applyHistoryFilters(records);
+
+  if (records.length === 0) {
+    container.innerHTML = `
+      <div class="empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><polyline points="12,7 12,12 15,15"/></svg>
+        <p>没有符合条件的记录</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = "";
+  records.forEach(r => {
+    const { day, month } = formatDate(r.date);
+    const memberDots = r.members.map(m => `<div class="history-dot" style="background:${MEMBERS[m]?.color || '#888'}"></div>`).join("");
+
+    const item = document.createElement("div");
+    item.className = "glass history-item";
+    item.innerHTML = `
+      <div class="history-date">
+        <div class="day">${day}</div>
+        <div class="month">${month}</div>
+      </div>
+      <div class="history-info">
+        <div class="history-members">${memberDots}</div>
+        <div class="history-stats">
+          <span>${formatDurationLong(r.duration)}</span>
+          <span>${(r.distance / 1000).toFixed(2)} km</span>
+        </div>
+      </div>
+      <button class="history-delete" onclick="event.stopPropagation();confirmDelete('${r.id}')">✕</button>
+    `;
+    item.onclick = () => showDetail(r);
+    container.appendChild(item);
+  });
+}
+
+// 历史页筛选状态
+app.historyTimeFilter = "all";
+app.historyMemberFilter = new Set();  // 空集合表示不筛选
+
+// 应用历史筛选
+function applyHistoryFilters(records) {
+  let result = records;
+
+  // 成员筛选
+  if (app.historyMemberFilter.size > 0) {
+    result = result.filter(r =>
+      r.members.some(m => app.historyMemberFilter.has(m))
+    );
+  }
+
+  // 时间筛选
+  if (app.historyTimeFilter !== "all") {
+    const range = getDateRange(app.historyTimeFilter);
+    result = result.filter(r => r.date >= range.fromStr && r.date <= range.toStr);
+  }
+
+  return result;
+}
+
+// 设置时间筛选
+function setHistoryTimeFilter(range) {
+  app.historyTimeFilter = range;
+  document.querySelectorAll("#filter-time .segment-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.range === range);
+  });
+  refreshHistory();
+}
+
+// 渲染成员筛选 chips
+function renderFilterMembers() {
+  const container = document.getElementById("filter-members");
+  container.innerHTML = "";
+  Object.entries(MEMBERS).forEach(([key, m]) => {
+    const chip = document.createElement("button");
+    chip.className = "filter-chip";
+    chip.dataset.member = key;
+    chip.innerHTML = `<span class="dot" style="background:${m.color}"></span>${m.name}`;
+    chip.onclick = () => {
+      if (app.historyMemberFilter.has(key)) {
+        app.historyMemberFilter.delete(key);
+        chip.classList.remove("active");
+        chip.style.background = "";
+      } else {
+        app.historyMemberFilter.add(key);
+        chip.classList.add("active");
+        chip.style.background = m.color;
+      }
+      refreshHistory();
+    };
+    container.appendChild(chip);
+  });
+}
+
+function confirmDelete(id) {
+  if (confirm("确定删除这条记录？")) {
+    deleteRecord(id);
+    refreshHistory();
+    showToast("已删除");
+  }
+}
+
+/* =========================================================================
+ *  详情弹窗
+ * ========================================================================= */
+function showDetail(record) {
+  const modal = document.getElementById("detail-modal");
+  const title = document.getElementById("detail-title");
+  const info = document.getElementById("detail-info");
+
+  const memberNames = record.members.map(m => MEMBERS[m]?.name || m).join("、");
+  title.textContent = `${record.date} · ${memberNames}`;
+
+  info.innerHTML = `
+    <div class="detail-row"><span class="label">时长</span><span class="val mono">${formatDurationLong(record.duration)}</span></div>
+    <div class="detail-row"><span class="label">距离</span><span class="val mono">${(record.distance / 1000).toFixed(2)} km</span></div>
+    <div class="detail-row"><span class="label">参与人</span><span class="val">${memberNames}</span></div>
+    <div class="detail-row"><span class="label">轨迹点数</span><span class="val mono">${record.track.length}</span></div>
+  `;
+
+  modal.classList.add("show");
+
+  // Render detail map（百度地图）
+  setTimeout(() => {
+    const detailContainer = document.getElementById("detail-map");
+    detailContainer.innerHTML = ""; // 清空旧地图
+
+    if (typeof BMap === "undefined" || !BMap.Map) {
+      detailContainer.innerHTML = '<div style="display:flex;height:100%;align-items:center;justify-content:center;color:#888;font-size:13px">地图未加载</div>';
+      return;
+    }
+
+    app.detailMap = new BMap.Map("detail-map");
+    app.detailMap.centerAndZoom(new BMap.Point(116.404, 39.915), 14);
+
+    if (record.track.length > 0) {
+      // WGS84 → BD09 转换所有轨迹点
+      const bdPoints = record.track.map(p => {
+        const [bdLng, bdLat] = wgs84tobd09(p.lng, p.lat);
+        return new BMap.Point(bdLng, bdLat);
+      });
+
+      // 绘制轨迹线
+      const polyline = new BMap.Polyline(bdPoints, {
+        strokeColor: "#4CAF50", strokeWeight: 5, strokeOpacity: 0.85
+      });
+      app.detailMap.addOverlay(polyline);
+
+      // 起点标记（绿色）
+      const startIcon = new BMap.Icon("https://api.map.baidu.com/images/markers.png", new BMap.Size(23, 25), {
+        offset: new BMap.Size(10, 25), imageOffset: new BMap.Size(0, -250)
+      });
+      const startMarker = new BMap.Marker(bdPoints[0], { icon: startIcon });
+      app.detailMap.addOverlay(startMarker);
+
+      // 终点标记（红色）
+      const endIcon = new BMap.Icon("https://api.map.baidu.com/images/markers.png", new BMap.Size(23, 25), {
+        offset: new BMap.Size(10, 25), imageOffset: new BMap.Size(0, -300)
+      });
+      const endMarker = new BMap.Marker(bdPoints[bdPoints.length - 1], { icon: endIcon });
+      app.detailMap.addOverlay(endMarker);
+
+      // 自适应视野
+      app.detailMap.setViewport(bdPoints, { margins: [40, 40, 40, 40] });
+    }
+  }, 200);
+}
+
+function closeDetail(e) {
+  if (e.target === document.getElementById("detail-modal")) {
+    document.getElementById("detail-modal").classList.remove("show");
+    // 百度地图清空：直接清空容器即可
+    document.getElementById("detail-map").innerHTML = "";
+    app.detailMap = null;
+  }
+}
+
+/* =========================================================================
+ *  初始化
+ * ========================================================================= */
+function init() {
+  // Set today date
+  const now = new Date();
+  const weekdays = ["周日","周一","周二","周三","周四","周五","周六"];
+  document.getElementById("today-date").textContent = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${weekdays[now.getDay()]}`;
+
+  // Set default custom date range
+  document.getElementById("date-from").value = todayStr();
+  document.getElementById("date-to").value = todayStr();
+
+  // Init UI
+  renderMemberSelect();
+  renderFilterMembers();
+  renderControlButtons("idle");
+
+  // 云端同步状态徽标
+  updateCloudBadge();
+  // 启动时从云端拉取最新数据（异步，不阻塞UI）
+  if (USE_CLOUD) {
+    syncFromCloud().then(ok => {
+      if (ok) showToast("云端数据已同步");
+    });
+  }
+
+  // 百度地图异步加载，轮询等待 BMap.Map 就绪（地图是可选的，不影响核心功能）
+  waitForBMap();
+}
+
+function waitForBMap() {
+  if (typeof BMap !== "undefined" && BMap.Map) {
+    initMap();
+  } else {
+    if (!app._bmapWaitStart) app._bmapWaitStart = Date.now();
+    if (Date.now() - app._bmapWaitStart > 8000) {
+      // 地图加载超时，显示提示但不阻塞功能
+      document.getElementById("map-container").innerHTML =
+        '<div style="display:flex;height:100%;align-items:center;justify-content:center;color:var(--text-muted);font-size:12px;padding:20px;text-align:center;line-height:1.6">地图暂未加载<br>不影响记录功能<br>可正常开始追踪</div>';
+      return;
+    }
+    setTimeout(waitForBMap, 100);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
