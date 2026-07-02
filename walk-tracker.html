@@ -553,19 +553,10 @@ function saveRecords(records) {
 }
 
 function addRecord(record) {
-  // 1. 立即写入本地缓存（同步可见）
+  // 仅写入本地缓存（云端操作由 markSessionStart/markSessionComplete 处理）
   const records = loadRecords();
   records.push(record);
   saveRecords(records);
-  // 2. 异步写入云端
-  if (USE_CLOUD) {
-    supabaseClient.from("walk_records")
-      .insert({ id: record.id, data: record })
-      .then(({ error }) => {
-        if (error) console.warn("[云数据库] 保存失败:", error.message);
-        else console.log("[云数据库] 已保存记录", record.id);
-      });
-  }
 }
 
 function deleteRecord(id) {
@@ -583,15 +574,34 @@ function deleteRecord(id) {
   }
 }
 
-// 从云端拉取全部记录，覆盖本地缓存
+// 从云端拉取全部记录，覆盖本地缓存（同时清理超时的"进行中"垃圾记录）
 async function syncFromCloud() {
   if (!USE_CLOUD) return false;
   try {
-    const { data, error } = await supabaseClient.from("walk_records").select("data");
+    const { data, error } = await supabaseClient.from("walk_records").select("data,id");
     if (error) throw error;
-    const records = (data || []).map(row => row.data).sort((a, b) => a.startTime - b.startTime);
-    saveRecords(records);
-    console.log(`[云数据库] 已同步 ${records.length} 条记录`);
+    const now = Date.now();
+    const TWO_HOURS = 2 * 60 * 60 * 1000;
+    const garbageIds = [];
+    const completed = [];
+    (data || []).forEach(row => {
+      const r = row.data;
+      if (r.startTime && !r.endTime) {
+        // 进行中记录：超过 2 小时视为垃圾，删除
+        if (now - r.startTime > TWO_HOURS) garbageIds.push(row.id);
+        // 进行中的记录不放入本地缓存（避免污染统计）
+        return;
+      }
+      completed.push(r);
+    });
+    completed.sort((a, b) => a.startTime - b.startTime);
+    saveRecords(completed);
+    // 异步清理垃圾进行中记录
+    garbageIds.forEach(id => {
+      supabaseClient.from("walk_records").delete().eq("id", id)
+        .then(() => console.log("[云数据库] 清理超时记录:", id));
+    });
+    console.log(`[云数据库] 已同步 ${completed.length} 条记录，清理 ${garbageIds.length} 条垃圾`);
     return true;
   } catch (e) {
     console.warn("[云数据库] 同步失败，使用本地缓存:", e.message);
@@ -946,9 +956,64 @@ function showMembersOnMap(bdLng, bdLat) {
 /* =========================================================================
  *  记录页 - GPS 追踪
  * ========================================================================= */
-function startTracking() {
+
+// 检查云端是否有成员正在进行中的记录（30 分钟内未结束）
+async function checkMembersInSession(members) {
+  if (!USE_CLOUD) return [];
+  try {
+    const { data, error } = await supabaseClient.from("walk_records").select("data");
+    if (error) throw error;
+    const now = Date.now();
+    const THIRTY_MIN = 30 * 60 * 1000;
+    const inSession = new Set();
+    (data || []).forEach(row => {
+      const r = row.data;
+      // 进行中标记：startTime 存在但 endTime 不存在，且开始时间在 30 分钟内
+      if (r.startTime && !r.endTime && (now - r.startTime) < THIRTY_MIN) {
+        (r.members || []).forEach(m => inSession.add(m));
+      }
+    });
+    return members.filter(m => inSession.has(m));
+  } catch (e) {
+    console.warn("[云数据库] 检查进行中记录失败:", e.message);
+    return [];  // 查询失败不阻塞，让用户继续
+  }
+}
+
+// 写入"进行中"标记记录到云端
+async function markSessionStart(record) {
+  if (!USE_CLOUD) return;
+  try {
+    await supabaseClient.from("walk_records")
+      .insert({ id: record.id, data: { ...record, endTime: null } });
+  } catch (e) {
+    console.warn("[云数据库] 写入进行中标记失败:", e.message);
+  }
+}
+
+// 更新记录为完成状态（补充 endTime 等字段）
+async function markSessionComplete(record) {
+  if (!USE_CLOUD) return;
+  try {
+    await supabaseClient.from("walk_records")
+      .update({ data: record }).eq("id", record.id);
+  } catch (e) {
+    console.warn("[云数据库] 更新完成状态失败:", e.message);
+  }
+}
+
+async function startTracking() {
   if (app.selectedMembers.size === 0) { showToast("请先选择参与成员"); return; }
   if (!navigator.geolocation) { showToast("浏览器不支持定位"); return; }
+
+  // 检查云端是否有成员正在进行中的记录
+  const selectedMembers = Array.from(app.selectedMembers);
+  const inSession = await checkMembersInSession(selectedMembers);
+  if (inSession.length > 0) {
+    const names = inSession.map(k => MEMBERS[k].name).join("、");
+    showToast(`${names} 已在运动过程中，请勿重复记录`);
+    return;
+  }
 
   app.tracking = true;
   app.paused = false;
@@ -957,6 +1022,19 @@ function startTracking() {
   app.distance = 0;
   app.track = [];
   app.lastPos = null;
+
+  // 生成记录 ID，先写入云端作为"进行中"标记
+  app.currentRecordId = String(Date.now()) + "-" + Math.random().toString(36).slice(2, 8);
+  const sessionRecord = {
+    id: app.currentRecordId,
+    date: todayStr(),
+    startTime: app.startTime,
+    members: selectedMembers,
+    track: [],
+    distance: 0,
+    duration: 0
+  };
+  await markSessionStart(sessionRecord);
 
   // Update UI
   renderControlButtons("tracking");
@@ -1054,9 +1132,9 @@ function stopTracking() {
   // Final elapsed
   app.elapsed = Math.floor((Date.now() - app.startTime - app.totalPaused) / 1000);
 
-  // Save record
+  // Save record（使用开始时生成的 ID，更新云端记录为完成状态）
   const record = {
-    id: String(Date.now()),
+    id: app.currentRecordId || String(Date.now()),
     date: todayStr(),
     startTime: app.startTime,
     endTime: Date.now(),
@@ -1067,8 +1145,12 @@ function stopTracking() {
     pausedDuration: Math.round(app.totalPaused / 1000)
   };
 
+  // 1. 本地缓存添加完整记录
   addRecord(record);
+  // 2. 云端更新：把"进行中"记录补全为完成状态
+  markSessionComplete(record);
   showToast("记录已保存");
+  app.currentRecordId = null;
 
   // Reset UI
   resetRecordPage();
